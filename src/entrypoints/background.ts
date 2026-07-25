@@ -1,10 +1,21 @@
 import type { RuntimeMessage } from '@/lib/messages';
 
 export default defineBackground(() => {
-  // Clicking the toolbar icon opens the side panel (also grants activeTab).
+  // Panel is per-tab: disabled by default, enabled only on tabs where the
+  // user clicks the toolbar icon. Switching to a non-activated tab hides it.
   browser.sidePanel
-    .setPanelBehavior({ openPanelOnActionClick: true })
-    .catch((err) => console.error('sidePanel.setPanelBehavior failed', err));
+    .setOptions({ enabled: false })
+    .catch((err) => console.error('sidePanel.setOptions failed', err));
+
+  browser.action.onClicked.addListener(async (tab) => {
+    if (tab.id == null) return;
+    await browser.sidePanel.setOptions({
+      tabId: tab.id,
+      path: 'sidepanel.html',
+      enabled: true,
+    });
+    await browser.sidePanel.open({ tabId: tab.id });
+  });
 
   browser.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
     if (message.type !== 'INJECT_CONTENT') return;
