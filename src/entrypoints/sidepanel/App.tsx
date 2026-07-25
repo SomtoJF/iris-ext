@@ -5,30 +5,51 @@ import type { AuthState, DetectedField } from "@/lib/types";
 import { getMe, openLogin } from "@/services/auth";
 import { generateAnswers } from "@/services/fill";
 import { syncFields } from "@/services/sync";
+import type { JobApplicationSummary } from "@/services/jobs";
 import { AuthGate } from "@/components/AuthGate";
 import { FieldList } from "@/components/FieldList";
+import { HomeScreen } from "@/components/HomeScreen";
 import { SyncButton } from "@/components/SyncButton";
+import { ArrowLeft, FileScan, RefreshCcw, Sparkles } from "lucide-react";
 
-type FieldsByTab = Record<number, DetectedField[]>;
+interface TabSession {
+  application?: JobApplicationSummary;
+  fields: DetectedField[];
+}
 
-const STORAGE_KEY = "fieldsByTab";
+type SessionsByTab = Record<number, TabSession>;
+
+const STORAGE_KEY = "sessionsByTab";
+
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
 
 export default function App() {
   const [auth, setAuth] = useState<AuthState>({ status: "loading" });
   const [tabId, setTabId] = useState<number | null>(null);
-  const [fieldsByTab, setFieldsByTab] = useState<FieldsByTab>({});
+  const [sessions, setSessions] = useState<SessionsByTab>({});
   const [scanning, setScanning] = useState(false);
   const [filling, setFilling] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hydrated = useRef(false);
 
-  const fields = tabId != null ? (fieldsByTab[tabId] ?? []) : [];
+  const session = tabId != null ? sessions[tabId] : undefined;
+  const fields = session?.fields ?? [];
   const unsyncedCount = fields.filter((f) => !f.synced).length;
 
   const setTabFields = useCallback(
     (tab: number, update: (prev: DetectedField[]) => DetectedField[]) => {
-      setFieldsByTab((prev) => ({ ...prev, [tab]: update(prev[tab] ?? []) }));
+      setSessions((prev) => {
+        const s = prev[tab];
+        if (!s) return prev; // no session -> home view; ignore stray updates
+        return { ...prev, [tab]: { ...s, fields: update(s.fields) } };
+      });
     },
     [],
   );
@@ -42,16 +63,15 @@ export default function App() {
       });
       if (tab?.id != null) setTabId(tab.id);
       const stored = await browser.storage.session.get(STORAGE_KEY);
-      if (stored[STORAGE_KEY])
-        setFieldsByTab(stored[STORAGE_KEY] as FieldsByTab);
+      if (stored[STORAGE_KEY]) setSessions(stored[STORAGE_KEY] as SessionsByTab);
       hydrated.current = true;
     })();
   }, []);
 
   useEffect(() => {
     if (!hydrated.current) return;
-    browser.storage.session.set({ [STORAGE_KEY]: fieldsByTab });
-  }, [fieldsByTab]);
+    browser.storage.session.set({ [STORAGE_KEY]: sessions });
+  }, [sessions]);
 
   const refreshAuth = useCallback(async () => {
     try {
@@ -77,18 +97,25 @@ export default function App() {
     };
   }, [refreshAuth]);
 
-  // Track the active tab; drop a tab's progress only when it navigates away or closes.
+  // Track the active tab. On navigation: keep the application association while
+  // staying on the same site (multi-page forms), otherwise drop the session.
   useEffect(() => {
     const onActivated = (info: { tabId: number }) => setTabId(info.tabId);
     const onUpdated = (id: number, info: { url?: string }) => {
-      if (info.url)
-        setFieldsByTab((prev) => {
-          const { [id]: _dropped, ...rest } = prev;
-          return rest;
-        });
+      if (!info.url) return;
+      setSessions((prev) => {
+        const s = prev[id];
+        if (!s) return prev;
+        const appUrl = s.application?.url;
+        if (appUrl && sameOrigin(appUrl, info.url!)) {
+          return { ...prev, [id]: { ...s, fields: [] } };
+        }
+        const { [id]: _dropped, ...rest } = prev;
+        return rest;
+      });
     };
     const onRemoved = (id: number) =>
-      setFieldsByTab((prev) => {
+      setSessions((prev) => {
         const { [id]: _dropped, ...rest } = prev;
         return rest;
       });
@@ -101,6 +128,31 @@ export default function App() {
       browser.tabs.onRemoved.removeListener(onRemoved);
     };
   }, []);
+
+  const startNew = useCallback(() => {
+    if (tabId == null) return;
+    setSessions((prev) => ({ ...prev, [tabId]: { fields: [] } }));
+  }, [tabId]);
+
+  const continueApplication = useCallback(async (app: JobApplicationSummary) => {
+    const tab = await browser.tabs.create({ url: app.url });
+    if (tab.id == null) return;
+    // Panel is per-tab: enable it on the new tab so it stays visible there.
+    await browser.sidePanel.setOptions({
+      tabId: tab.id,
+      path: "sidepanel.html",
+      enabled: true,
+    });
+    setSessions((prev) => ({ ...prev, [tab.id!]: { application: app, fields: [] } }));
+  }, []);
+
+  const goHome = useCallback(() => {
+    if (tabId == null) return;
+    setSessions((prev) => {
+      const { [tabId]: _dropped, ...rest } = prev;
+      return rest;
+    });
+  }, [tabId]);
 
   const fillFields = useCallback(
     async (tab: number, targets: DetectedField[]) => {
@@ -159,8 +211,8 @@ export default function App() {
           );
           break;
         case "FILL_REQUESTED": {
-          setFieldsByTab((prev) => {
-            const field = (prev[senderTab] ?? []).find(
+          setSessions((prev) => {
+            const field = (prev[senderTab]?.fields ?? []).find(
               (f) => f.id === message.payload.fieldId,
             );
             if (field) fillFields(senderTab, [field]);
@@ -230,7 +282,24 @@ export default function App() {
   return (
     <div className="flex h-screen flex-col bg-white text-sm text-gray-900">
       <header className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-        <h1 className="text-base font-semibold text-violet-700">Iris</h1>
+        <div className="flex min-w-0 items-center gap-2">
+          {session && (
+            <button
+              onClick={goHome}
+              title="Back to applications"
+              className="shrink-0 rounded p-1 text-gray-500 hover:bg-gray-100"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          )}
+          <h1 className="truncate text-base font-semibold text-violet-700">
+            {session?.application
+              ? `${session.application.jobTitle} — ${session.application.companyName}`
+              : session
+                ? "New application"
+                : "Iris"}
+          </h1>
+        </div>
         {auth.status === "authed" && (
           <span className="truncate text-xs text-gray-500">
             {auth.user.email}
@@ -239,42 +308,55 @@ export default function App() {
       </header>
 
       <AuthGate auth={auth} onLogin={openLogin}>
-        <div className="flex flex-col gap-3 p-4">
-          <div className="flex gap-2">
-            <button
-              onClick={scan}
-              disabled={scanning}
-              className="flex-1 rounded-md border border-violet-600 px-3 py-2 font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50"
-            >
-              {scanning
-                ? "Scanning…"
-                : fields.length > 0
-                  ? "Rescan page"
-                  : "Scan this page"}
-            </button>
-            <SyncButton count={unsyncedCount} syncing={syncing} onSync={sync} />
-          </div>
+        {!session ? (
+          <HomeScreen onContinue={continueApplication} onNew={startNew} />
+        ) : (
+          <>
+            <div className="flex flex-col gap-3 p-4">
+              <div className="flex gap-2">
+                <button
+                  onClick={scan}
+                  disabled={scanning}
+                  className="flex-1 rounded-md border border-violet-600 px-3 py-2 font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50 flex items-center gap-2"
+                >
+                  <FileScan className="h-4 w-4" />
+                  {scanning
+                    ? "Scanning…"
+                    : fields.length > 0
+                      ? "Rescan page"
+                      : "Scan this page"}
+                </button>
+                <SyncButton
+                  count={unsyncedCount}
+                  syncing={syncing}
+                  icon={<RefreshCcw className="h-4 w-4" />}
+                  onSync={sync}
+                />
+              </div>
 
-          {fields.length > 0 && (
-            <button
-              onClick={() => tabId != null && fillFields(tabId, fields)}
-              disabled={filling}
-              className="rounded-md bg-violet-600 px-3 py-2 font-medium text-white hover:bg-violet-700 disabled:opacity-50"
-            >
-              {filling ? "Filling…" : "Autofill all fields"}
-            </button>
-          )}
+              {fields.length > 0 && (
+                <button
+                  onClick={() => tabId != null && fillFields(tabId, fields)}
+                  disabled={filling}
+                  className="rounded-md bg-violet-600 px-3 py-2 font-medium text-white hover:bg-violet-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  {filling ? "Filling…" : "Autofill all fields"}
+                </button>
+              )}
 
-          {error && (
-            <p className="rounded-md bg-red-50 p-2 text-xs text-red-700">
-              {error}
-            </p>
-          )}
-        </div>
+              {error && (
+                <p className="rounded-md bg-red-50 p-2 text-xs text-red-700">
+                  {error}
+                </p>
+              )}
+            </div>
 
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
-          <FieldList fields={fields} />
-        </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
+              <FieldList fields={fields} />
+            </div>
+          </>
+        )}
       </AuthGate>
     </div>
   );
