@@ -14,6 +14,7 @@ export default defineConfig({
     description: 'AI-assisted job applications',
     permissions: ['sidePanel', 'activeTab', 'scripting', 'tabs', 'storage'],
     host_permissions: ['http://localhost:4000/*'],
+    optional_host_permissions: ['http://*/*', 'https://*/*'],
     action: {
       default_title: 'Open Iris',
     },

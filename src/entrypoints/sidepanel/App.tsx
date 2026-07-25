@@ -114,8 +114,21 @@ export default function App() {
     try {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) throw new Error('No active tab');
+      if (tab.url && !/^https?:/.test(tab.url)) {
+        throw new Error('This page cannot be scanned. Open a job application page first.');
+      }
       setTabId(tab.id);
-      await sendToRuntime({ type: 'INJECT_CONTENT', payload: { tabId: tab.id } });
+      // activeTab evaporates on navigation; ask for persistent per-site access instead.
+      const origin = `${new URL(tab.url!).origin}/*`;
+      const granted =
+        (await browser.permissions.contains({ origins: [origin] })) ||
+        (await browser.permissions.request({ origins: [origin] }));
+      if (!granted) throw new Error('Permission to access this site was declined.');
+      const inject = await sendToRuntime<{ ok: boolean; error?: string }>({
+        type: 'INJECT_CONTENT',
+        payload: { tabId: tab.id },
+      });
+      if (!inject?.ok) throw new Error(inject?.error ?? 'Could not inject into the page');
       const res = await sendToTab<ScanFieldsResponse>(tab.id, { type: 'SCAN_FIELDS' });
       setFields(res.fields);
     } catch (e) {
