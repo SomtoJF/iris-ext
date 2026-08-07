@@ -6,11 +6,10 @@ import { getMe, openLogin } from "@/services/auth";
 import { generateAnswers } from "@/services/fill";
 import { syncFields } from "@/services/sync";
 import type { JobApplicationSummary } from "@/services/jobs";
+import ApplicationScreen from "@/components/ApplicationScreen";
 import { AuthGate } from "@/components/AuthGate";
-import { FieldList } from "@/components/FieldList";
 import { HomeScreen } from "@/components/HomeScreen";
-import { SyncButton } from "@/components/SyncButton";
-import { ArrowLeft, FileScan, RefreshCcw, Sparkles } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 interface TabSession {
   application?: JobApplicationSummary;
@@ -63,7 +62,8 @@ export default function App() {
       });
       if (tab?.id != null) setTabId(tab.id);
       const stored = await browser.storage.session.get(STORAGE_KEY);
-      if (stored[STORAGE_KEY]) setSessions(stored[STORAGE_KEY] as SessionsByTab);
+      if (stored[STORAGE_KEY])
+        setSessions(stored[STORAGE_KEY] as SessionsByTab);
       hydrated.current = true;
     })();
   }, []);
@@ -134,17 +134,23 @@ export default function App() {
     setSessions((prev) => ({ ...prev, [tabId]: { fields: [] } }));
   }, [tabId]);
 
-  const continueApplication = useCallback(async (app: JobApplicationSummary) => {
-    const tab = await browser.tabs.create({ url: app.url });
-    if (tab.id == null) return;
-    // Panel is per-tab: enable it on the new tab so it stays visible there.
-    await browser.sidePanel.setOptions({
-      tabId: tab.id,
-      path: "sidepanel.html",
-      enabled: true,
-    });
-    setSessions((prev) => ({ ...prev, [tab.id!]: { application: app, fields: [] } }));
-  }, []);
+  const continueApplication = useCallback(
+    async (app: JobApplicationSummary) => {
+      const tab = await browser.tabs.create({ url: app.url });
+      if (tab.id == null) return;
+      // Panel is per-tab: enable it on the new tab so it stays visible there.
+      await browser.sidePanel.setOptions({
+        tabId: tab.id,
+        path: "sidepanel.html",
+        enabled: true,
+      });
+      setSessions((prev) => ({
+        ...prev,
+        [tab.id!]: { application: app, fields: [] },
+      }));
+    },
+    [],
+  );
 
   const goHome = useCallback(() => {
     if (tabId == null) return;
@@ -311,51 +317,19 @@ export default function App() {
         {!session ? (
           <HomeScreen onContinue={continueApplication} onNew={startNew} />
         ) : (
-          <>
-            <div className="flex flex-col gap-3 p-4">
-              <div className="flex gap-2">
-                <button
-                  onClick={scan}
-                  disabled={scanning}
-                  className="flex-1 rounded-md border border-violet-600 px-3 py-2 font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50 flex items-center gap-2"
-                >
-                  <FileScan className="h-4 w-4" />
-                  {scanning
-                    ? "Scanning…"
-                    : fields.length > 0
-                      ? "Rescan page"
-                      : "Scan this page"}
-                </button>
-                <SyncButton
-                  count={unsyncedCount}
-                  syncing={syncing}
-                  icon={<RefreshCcw className="h-4 w-4" />}
-                  onSync={sync}
-                />
-              </div>
-
-              {fields.length > 0 && (
-                <button
-                  onClick={() => tabId != null && fillFields(tabId, fields)}
-                  disabled={filling}
-                  className="rounded-md bg-violet-600 px-3 py-2 font-medium text-white hover:bg-violet-700 disabled:opacity-50 flex items-center gap-2"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  {filling ? "Filling…" : "Autofill all fields"}
-                </button>
-              )}
-
-              {error && (
-                <p className="rounded-md bg-red-50 p-2 text-xs text-red-700">
-                  {error}
-                </p>
-              )}
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-4 pb-4">
-              <FieldList fields={fields} />
-            </div>
-          </>
+          <ApplicationScreen
+            fields={fields}
+            scanning={scanning}
+            filling={filling}
+            syncing={syncing}
+            error={error}
+            tabId={tabId}
+            unsyncedCount={unsyncedCount}
+            onScan={scan}
+            onSync={sync}
+            onFill={fillFields}
+            applicationId={session.application?.id!}
+          />
         )}
       </AuthGate>
     </div>

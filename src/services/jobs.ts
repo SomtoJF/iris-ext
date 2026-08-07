@@ -6,7 +6,8 @@ export type JobApplicationStatus =
   | "failed"
   | "blocked"
   | "cancelled"
-  | "halted";
+  | "halted" 
+  | "pending";
 
 export interface JobApplicationSummary {
   id: string;
@@ -26,6 +27,26 @@ interface FetchJobsEnvelope {
   };
 }
 
+interface FetchApplicationComprehensiveEnvelope {
+  data: JobApplicationComprehensiveResponse;
+}
+
+export interface JobApplicationQuestions {
+  question: string;
+  answer: string;
+}
+
+export interface JobApplicationComprehensiveResponse {
+  id: string;
+  url: string;
+  jobTitle: string;
+  companyName: string;
+  status: JobApplicationStatus;
+  coverLetter: string | null;
+  questions: JobApplicationQuestions[] | null;
+  jobDescription: string;
+}
+
 // Non-completed applications: GET /jobs with status_not=applied
 // (endpoint already excludes cover-letter-only rows).
 export async function fetchIncompleteApplications(
@@ -43,4 +64,14 @@ export async function fetchIncompleteApplications(
   if (!res.ok) throw new Error(`Failed to fetch applications (${res.status})`);
   const body = (await res.json()) as FetchJobsEnvelope;
   return { applications: body.data.data, total: body.data.total };
+}
+
+export async function fetchApplicationComprehensive(id: string): Promise<JobApplicationComprehensiveResponse> {
+  const res = await fetch(`${API_URL}/jobs/${id}/comprehensive`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) throw new Error(`Failed to fetch application comprehensive (${res.status})`);
+  const body = (await res.json()) as FetchApplicationComprehensiveEnvelope;
+  return body.data;
 }
