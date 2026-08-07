@@ -41,8 +41,12 @@ export default function ApplicationScreen({
     useState<JobApplicationComprehensiveResponse | null>(null);
   const [currentTab, setCurrentTab] = useState<"resume" | "fields">("fields");
   const [resumes, setResumes] = useState<Resume[]>([]);
+  const [isNewApplication, setIsNewApplication] = useState(true);
+  const [isInitiatingApplication, setIsInitiatingApplication] = useState(false);
 
   useEffect(() => {
+    if (applicationId == null) return;
+    setIsNewApplication(false);
     fetchApplicationComprehensive(applicationId).then(setCompleteApplication);
   }, [applicationId]);
 
@@ -69,6 +73,8 @@ export default function ApplicationScreen({
     );
   };
 
+  const handleInitiateApplication = () => {};
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {completeApplication && (
@@ -79,74 +85,97 @@ export default function ApplicationScreen({
           <p>{completeApplication?.jobDescription}</p>
         </div>
       )}
-      <div className="flex gap-2 w-full justify-center pt-2 px-2">
-        <button
-          onClick={() => handleTabChange("fields")}
-          className={`${currentTab === "fields" ? "border-b-2 border-violet-600" : "border-b-2 border-gray-200"} px-3 py-1 rounded-none text-sm font-medium w-full text-center`}
-        >
-          Application Data
-        </button>
-        <button
-          onClick={() => handleTabChange("resume")}
-          className={`${currentTab === "resume" ? "border-b-2 border-violet-600" : "border-b-2 border-gray-200"} px-3 py-1 rounded-none text-sm font-medium w-full text-center`}
-        >
-          Resume
-        </button>
-      </div>
-      {currentTab === "fields" && (
-        <>
-          <div className="flex flex-col gap-3 p-4">
-            <div className="flex gap-2">
-              <button
-                onClick={onScan}
-                disabled={scanning}
-                className="flex flex-1 items-center gap-2 rounded-md border border-violet-600 px-3 py-2 font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50"
-              >
-                <FileScan className="h-4 w-4" />
-                {scanning
-                  ? "Scanning…"
-                  : fields.length > 0
-                    ? "Rescan page"
-                    : "Scan this page"}
-              </button>
-              <SyncButton
-                count={unsyncedCount}
-                syncing={syncing}
-                icon={<RefreshCcw className="h-4 w-4" />}
-                onSync={onSync}
-              />
-            </div>
-
-            {fields.length > 0 && (
-              <button
-                onClick={() => tabId != null && onFill(tabId, fields)}
-                disabled={filling}
-                className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 font-medium text-white hover:bg-violet-700 disabled:opacity-50"
-              >
-                <Sparkles className="h-4 w-4" />
-                {filling ? "Filling…" : "Autofill all fields"}
-              </button>
-            )}
-
-            {error && (
-              <p className="rounded-md bg-red-50 p-2 text-xs text-red-700">
-                {error}
-              </p>
-            )}
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
-            <FieldList fields={fields} />
-          </div>
-        </>
+      {isNewApplication && (
+        <div className="flex flex-col gap-2 p-4">
+          <button
+            type="button"
+            onClick={handleInitiateApplication}
+            disabled={isInitiatingApplication}
+            className="mx-auto flex aspect-square w-44 flex-col items-center justify-center gap-2 rounded-full bg-violet-100 px-6 text-center transition-colors hover:bg-violet-200 disabled:opacity-50"
+          >
+            <Sparkles className="h-10 w-10 text-violet-500" />
+            <p className="text-sm font-medium text-gray-500">
+              {isInitiatingApplication ? "Initiating…" : "Initiate application"}
+            </p>
+            <p className="text-xs leading-tight text-gray-500">
+              Click to initiate application
+            </p>
+          </button>
+        </div>
       )}
-      {currentTab === "resume" && (
-        <ResumeTab
-          applicationId={applicationId || null}
-          applicationResumeId={completeApplication?.resume.id ?? null}
-          resumes={resumes}
-          onApplicationResumeChange={handleApplicationResumeChange}
-        />
+
+      {!isNewApplication && (
+        <>
+          <div className="flex gap-2 w-full justify-center pt-2 px-2">
+            <button
+              onClick={() => handleTabChange("fields")}
+              className={`${currentTab === "fields" ? "border-b-2 border-violet-600" : "border-b-2 border-gray-200"} px-3 py-1 rounded-none text-sm font-medium w-full text-center`}
+            >
+              Application Data
+            </button>
+            <button
+              onClick={() => handleTabChange("resume")}
+              className={`${currentTab === "resume" ? "border-b-2 border-violet-600" : "border-b-2 border-gray-200"} px-3 py-1 rounded-none text-sm font-medium w-full text-center`}
+            >
+              Resume
+            </button>
+          </div>
+          {currentTab === "fields" && (
+            <>
+              <div className="flex flex-col gap-3 p-4">
+                <div className="flex gap-2">
+                  <button
+                    onClick={onScan}
+                    disabled={scanning}
+                    className="flex flex-1 items-center gap-2 rounded-md border border-violet-600 px-3 py-2 font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+                  >
+                    <FileScan className="h-4 w-4" />
+                    {scanning
+                      ? "Scanning…"
+                      : fields.length > 0
+                        ? "Rescan page"
+                        : "Scan this page"}
+                  </button>
+                  <SyncButton
+                    count={unsyncedCount}
+                    syncing={syncing}
+                    icon={<RefreshCcw className="h-4 w-4" />}
+                    onSync={onSync}
+                  />
+                </div>
+
+                {fields.length > 0 && (
+                  <button
+                    onClick={() => tabId != null && onFill(tabId, fields)}
+                    disabled={filling}
+                    className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {filling ? "Filling…" : "Autofill all fields"}
+                  </button>
+                )}
+
+                {error && (
+                  <p className="rounded-md bg-red-50 p-2 text-xs text-red-700">
+                    {error}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-4 pb-4">
+                <FieldList fields={fields} />
+              </div>
+            </>
+          )}
+          {currentTab === "resume" && (
+            <ResumeTab
+              applicationId={applicationId || null}
+              applicationResumeId={completeApplication?.resume.id ?? null}
+              resumes={resumes}
+              onApplicationResumeChange={handleApplicationResumeChange}
+            />
+          )}
+        </>
       )}
     </div>
   );
