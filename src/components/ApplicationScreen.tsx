@@ -86,20 +86,18 @@ export default function ApplicationScreen({
         </div>
       )}
       {isNewApplication && (
-        <div className="flex flex-col gap-2 p-4">
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+          <p className="text-gray-600">
+            Make sure the job description is visible on the page, then start.
+          </p>
           <button
             type="button"
             onClick={handleInitiateApplication}
             disabled={isInitiatingApplication}
-            className="mx-auto flex aspect-square w-44 flex-col items-center justify-center gap-2 rounded-full bg-violet-100 px-6 text-center transition-colors hover:bg-violet-200 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 font-medium text-white hover:bg-violet-700 disabled:opacity-50"
           >
-            <Sparkles className="h-10 w-10 text-violet-500" />
-            <p className="text-sm font-medium text-gray-500">
-              {isInitiatingApplication ? "Initiating…" : "Initiate application"}
-            </p>
-            <p className="text-xs leading-tight text-gray-500">
-              Click to initiate application
-            </p>
+            <Sparkles className="h-4 w-4" />
+            {isInitiatingApplication ? "Initiating…" : "Initiate application"}
           </button>
         </div>
       )}
