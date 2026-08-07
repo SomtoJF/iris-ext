@@ -36,6 +36,11 @@ export interface JobApplicationQuestions {
   answer: string;
 }
 
+export interface ResumeSummary {
+  id: string;
+  fileName: string;
+}
+
 export interface JobApplicationComprehensiveResponse {
   id: string;
   url: string;
@@ -45,6 +50,7 @@ export interface JobApplicationComprehensiveResponse {
   coverLetter: string | null;
   questions: JobApplicationQuestions[] | null;
   jobDescription: string;
+  resume: ResumeSummary;
 }
 
 // Non-completed applications: GET /jobs with status_not=applied
@@ -74,4 +80,17 @@ export async function fetchApplicationComprehensive(id: string): Promise<JobAppl
   if (!res.ok) throw new Error(`Failed to fetch application comprehensive (${res.status})`);
   const body = (await res.json()) as FetchApplicationComprehensiveEnvelope;
   return body.data;
+}
+
+export async function patchJobApplication(
+  id: string,
+  { resumeId }: { resumeId: string },
+): Promise<void> {
+  const res = await fetch(`${API_URL}/jobs/${id}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resumeId }),
+  });
+  if (!res.ok) throw new Error(`Failed to update job application (${res.status})`);
 }
