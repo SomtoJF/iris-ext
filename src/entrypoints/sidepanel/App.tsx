@@ -160,6 +160,18 @@ export default function App() {
     });
   }, [tabId]);
 
+  const handleApplicationCreated = useCallback(
+    (app: JobApplicationSummary) => {
+      if (tabId == null) return;
+      setSessions((prev) => {
+        const s = prev[tabId];
+        if (!s) return prev;
+        return { ...prev, [tabId]: { ...s, application: app } };
+      });
+    },
+    [tabId],
+  );
+
   const fillFields = useCallback(
     async (tab: number, targets: DetectedField[]) => {
       if (targets.length === 0) return;
@@ -328,7 +340,8 @@ export default function App() {
             onScan={scan}
             onSync={sync}
             onFill={fillFields}
-            applicationId={session.application?.id!}
+            applicationId={session.application?.id ?? null}
+            onApplicationCreated={handleApplicationCreated}
           />
         )}
       </AuthGate>

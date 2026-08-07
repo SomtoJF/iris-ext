@@ -94,3 +94,25 @@ export async function patchJobApplication(
   });
   if (!res.ok) throw new Error(`Failed to update job application (${res.status})`);
 }
+
+interface InitiateApplicationEnvelope {
+  data: JobApplicationSummary;
+}
+
+export async function initiateApplication({
+  url,
+  resumeId,
+}: {
+  url: string;
+  resumeId?: string;
+}): Promise<JobApplicationSummary> {
+  const res = await fetch(`${API_URL}/extension/initiate`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, resumeId: resumeId ?? "" }),
+  });
+  if (!res.ok) throw new Error(`Failed to initiate application (${res.status})`);
+  const body = (await res.json()) as InitiateApplicationEnvelope;
+  return body.data;
+}

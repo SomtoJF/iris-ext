@@ -4,14 +4,16 @@ import { FieldList } from "@/components/FieldList";
 import { SyncButton } from "@/components/SyncButton";
 import {
   fetchApplicationComprehensive,
+  initiateApplication,
   type JobApplicationComprehensiveResponse,
+  type JobApplicationSummary,
 } from "@/services/jobs";
 import { useState, useEffect } from "react";
 import ResumeTab from "./ResumeTab";
 import { fetchResumes, type Resume } from "@/services/resume";
 
 interface Props {
-  applicationId: string;
+  applicationId: string | null;
   fields: DetectedField[];
   scanning: boolean;
   filling: boolean;
@@ -22,6 +24,7 @@ interface Props {
   onScan: () => void;
   onSync: () => void;
   onFill: (tabId: number, fields: DetectedField[]) => void;
+  onApplicationCreated: (app: JobApplicationSummary) => void;
 }
 
 export default function ApplicationScreen({
@@ -36,17 +39,22 @@ export default function ApplicationScreen({
   onScan,
   onSync,
   onFill,
+  onApplicationCreated,
 }: Props) {
   const [completeApplication, setCompleteApplication] =
     useState<JobApplicationComprehensiveResponse | null>(null);
   const [currentTab, setCurrentTab] = useState<"resume" | "fields">("fields");
   const [resumes, setResumes] = useState<Resume[]>([]);
-  const [isNewApplication, setIsNewApplication] = useState(true);
   const [isInitiatingApplication, setIsInitiatingApplication] = useState(false);
+  const [initiateError, setInitiateError] = useState<string | null>(null);
+
+  const isNewApplication = applicationId == null;
 
   useEffect(() => {
-    if (applicationId == null) return;
-    setIsNewApplication(false);
+    if (applicationId == null) {
+      setCompleteApplication(null);
+      return;
+    }
     fetchApplicationComprehensive(applicationId).then(setCompleteApplication);
   }, [applicationId]);
 
@@ -73,7 +81,36 @@ export default function ApplicationScreen({
     );
   };
 
-  const handleInitiateApplication = () => {};
+  const handleInitiateApplication = async () => {
+    setIsInitiatingApplication(true);
+    setInitiateError(null);
+    try {
+      let url: string | undefined;
+      if (tabId != null) {
+        const tab = await browser.tabs.get(tabId);
+        url = tab.url;
+      } else {
+        const [tab] = await browser.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        url = tab?.url;
+      }
+      if (!url || !/^https?:/.test(url)) {
+        throw new Error(
+          "Open a job application page (http/https) before initiating.",
+        );
+      }
+
+      const resumeId = resumes.find((r) => r.isActive)?.id;
+      const summary = await initiateApplication({ url, resumeId });
+      onApplicationCreated(summary);
+    } catch (e) {
+      setInitiateError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsInitiatingApplication(false);
+    }
+  };
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -99,6 +136,11 @@ export default function ApplicationScreen({
             <Sparkles className="h-4 w-4" />
             {isInitiatingApplication ? "Initiating…" : "Initiate application"}
           </button>
+          {initiateError && (
+            <p className="rounded-md bg-red-50 p-2 text-xs text-red-700">
+              {initiateError}
+            </p>
+          )}
         </div>
       )}
 
@@ -167,7 +209,7 @@ export default function ApplicationScreen({
           )}
           {currentTab === "resume" && (
             <ResumeTab
-              applicationId={applicationId || null}
+              applicationId={applicationId}
               applicationResumeId={completeApplication?.resume.id ?? null}
               resumes={resumes}
               onApplicationResumeChange={handleApplicationResumeChange}
