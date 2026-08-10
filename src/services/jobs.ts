@@ -99,6 +99,15 @@ interface InitiateApplicationEnvelope {
   data: JobApplicationSummary;
 }
 
+async function readApiError(res: Response): Promise<string | null> {
+  try {
+    const body = (await res.json()) as { error?: string };
+    return body.error?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function initiateApplication({
   url,
   resumeId,
@@ -112,7 +121,25 @@ export async function initiateApplication({
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, resumeId: resumeId ?? "" }),
   });
-  if (!res.ok) throw new Error(`Failed to initiate application (${res.status})`);
+
+  if (!res.ok) {
+    const apiError = await readApiError(res);
+    switch (res.status) {
+      case 400:
+        throw new Error(apiError ?? "Invalid request — check the URL and that you have an active resume.");
+      case 401:
+        throw new Error("Session expired. Log in to Iris again.");
+      case 403:
+        throw new Error("Request blocked. Try reloading the extension.");
+      case 409:
+        throw new Error(apiError ?? "An application for this job already exists.");
+      case 500:
+        throw new Error(apiError ?? "Server failed to initiate the application. Try again.");
+      default:
+        throw new Error(apiError ?? `Failed to initiate application (${res.status})`);
+    }
+  }
+  
   const body = (await res.json()) as InitiateApplicationEnvelope;
   return body.data;
 }

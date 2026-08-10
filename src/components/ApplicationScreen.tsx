@@ -10,6 +10,7 @@ import {
 } from "@/services/jobs";
 import { useState, useEffect } from "react";
 import ResumeTab from "./ResumeTab";
+import { JobDescription } from "./JobDescription";
 import { fetchResumes, type Resume } from "@/services/resume";
 
 interface Props {
@@ -115,12 +116,7 @@ export default function ApplicationScreen({
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {completeApplication && (
-        <div className="p-4 max-h-64 border border-gray-200 mx-auto overflow-y-auto">
-          <h2 className="text-xs font-bold mb-2 text-gray-800 uppercase">
-            Job Description
-          </h2>
-          <p>{completeApplication?.jobDescription}</p>
-        </div>
+        <JobDescription markdown={completeApplication.jobDescription} />
       )}
       {isNewApplication && (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">

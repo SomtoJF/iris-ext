@@ -1,4 +1,5 @@
 import type { DetectedField } from "@/lib/types";
+import { Info } from "lucide-react";
 
 const badgeStyles: Record<DetectedField["filledBy"], string> = {
   none: "bg-gray-100 text-gray-500",
@@ -9,9 +10,13 @@ const badgeStyles: Record<DetectedField["filledBy"], string> = {
 export function FieldList({ fields }: { fields: DetectedField[] }) {
   if (fields.length === 0) {
     return (
-      <p className="text-center text-xs text-gray-400">
-        No fields detected yet. Scan the page to start.
-      </p>
+      <div className="text-center text-xs text-gray-400">
+        <p>No fields detected yet. Scan the page to start.</p>
+        <p className="bg-gray-100 text-gray-700 flex items-center gap-1 border border-gray-200 rounded-md p-1 mt-1">
+          <Info className="h-4 w-4" /> Make sure the un-filled fields are
+          visible in the page
+        </p>
+      </div>
     );
   }
   return (
