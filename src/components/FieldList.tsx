@@ -10,9 +10,9 @@ const badgeStyles: Record<DetectedField["filledBy"], string> = {
 export function FieldList({ fields }: { fields: DetectedField[] }) {
   if (fields.length === 0) {
     return (
-      <div className="text-center text-xs text-gray-400">
+      <div className="text-center text-xs text-gray-400 flex flex-col gap-1">
         <p>No fields detected yet. Scan the page to start.</p>
-        <p className="bg-gray-100 text-gray-700 flex items-center gap-1 border border-gray-200 rounded-md p-1 mt-1">
+        <p className="bg-gray-100 text-gray-700 flex items-center gap-1 border border-gray-200 rounded-md p-1 w-fit self-center">
           <Info className="h-4 w-4" /> Make sure the un-filled fields are
           visible in the page
         </p>
