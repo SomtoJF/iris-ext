@@ -5,6 +5,7 @@ const badgeStyles: Record<DetectedField["filledBy"], string> = {
   none: "bg-gray-100 text-gray-500",
   ai: "bg-violet-100 text-violet-700",
   user: "bg-amber-100 text-amber-700",
+  saved: "bg-emerald-100 text-emerald-700",
 };
 
 export function FieldList({ fields }: { fields: DetectedField[] }) {

@@ -34,6 +34,7 @@ interface FetchApplicationComprehensiveEnvelope {
 export interface JobApplicationQuestions {
   question: string;
   answer: string;
+  is_optional?: boolean;
 }
 
 export interface ResumeSummary {
@@ -142,4 +143,57 @@ export async function initiateApplication({
   
   const body = (await res.json()) as InitiateApplicationEnvelope;
   return body.data;
+}
+
+export interface AutofillQuestionInput {
+  id: string;
+  question: string;
+}
+
+export interface AutofillAnsweredQuestion {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+interface AutofillEnvelope {
+  data: { questions: AutofillAnsweredQuestion[] };
+}
+
+export async function autofillApplication(
+  applicationId: string,
+  questions: AutofillQuestionInput[],
+): Promise<AutofillAnsweredQuestion[]> {
+  const res = await fetch(`${API_URL}/extension/application/${applicationId}/autofill`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ questions }),
+  });
+  if (!res.ok) {
+    const apiError = await readApiError(res);
+    throw new Error(apiError ?? `Autofill failed (${res.status})`);
+  }
+  const body = (await res.json()) as AutofillEnvelope;
+  return body.data.questions;
+}
+
+export async function syncApplicationData(
+  applicationId: string,
+  questions: JobApplicationQuestions[],
+  coverLetter?: string | null,
+): Promise<void> {
+  const res = await fetch(`${API_URL}/extension/application/${applicationId}/sync-data`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      questions,
+      coverLetter: coverLetter ?? undefined,
+    }),
+  });
+  if (!res.ok) {
+    const apiError = await readApiError(res);
+    throw new Error(apiError ?? `Sync failed (${res.status})`);
+  }
 }

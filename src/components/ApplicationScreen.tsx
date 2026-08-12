@@ -1,14 +1,17 @@
 import { Sparkles } from "lucide-react";
 import type { DetectedField } from "@/lib/types";
+import type { FieldAnswer } from "@/lib/messages";
 import {
   fetchApplicationComprehensive,
   initiateApplication,
   type JobApplicationComprehensiveResponse,
+  type JobApplicationQuestions,
   type JobApplicationSummary,
 } from "@/services/jobs";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import ResumeTab from "./ResumeTab";
 import FieldsTab from "./FieldsTab";
+import AnswersTab from "./AnswersTab";
 import { JobDescription } from "./JobDescription";
 import { fetchResumes, type Resume } from "@/services/resume";
 
@@ -24,7 +27,9 @@ interface Props {
   onScan: () => void;
   onSync: () => void;
   onFill: (tabId: number, fields: DetectedField[]) => void;
+  onFillFromMemory: (tabId: number, answers: FieldAnswer[]) => void;
   onApplicationCreated: (app: JobApplicationSummary) => void;
+  questionsRefreshKey?: number;
 }
 
 export default function ApplicationScreen({
@@ -39,32 +44,39 @@ export default function ApplicationScreen({
   onScan,
   onSync,
   onFill,
+  onFillFromMemory,
   onApplicationCreated,
+  questionsRefreshKey = 0,
 }: Props) {
   const [completeApplication, setCompleteApplication] =
     useState<JobApplicationComprehensiveResponse | null>(null);
-  const [currentTab, setCurrentTab] = useState<"resume" | "fields">("fields");
+  const [currentTab, setCurrentTab] = useState<"fields" | "answers" | "resume">(
+    "fields",
+  );
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [isInitiatingApplication, setIsInitiatingApplication] = useState(false);
   const [initiateError, setInitiateError] = useState<string | null>(null);
 
   const isNewApplication = applicationId == null;
+  const savedQuestions: JobApplicationQuestions[] =
+    completeApplication?.questions ?? [];
+
+  const loadComprehensive = useCallback(async (id: string) => {
+    const data = await fetchApplicationComprehensive(id);
+    setCompleteApplication(data);
+  }, []);
 
   useEffect(() => {
     if (applicationId == null) {
       setCompleteApplication(null);
       return;
     }
-    fetchApplicationComprehensive(applicationId).then(setCompleteApplication);
-  }, [applicationId]);
+    loadComprehensive(applicationId).catch(console.error);
+  }, [applicationId, questionsRefreshKey, loadComprehensive]);
 
   useEffect(() => {
     fetchResumes().then(setResumes);
   }, []);
-
-  const handleTabChange = (tab: "resume" | "fields") => {
-    setCurrentTab(tab);
-  };
 
   const handleApplicationResumeChange = (resumeId: string) => {
     const resume = resumes.find((r) => r.id === resumeId);
@@ -141,19 +153,23 @@ export default function ApplicationScreen({
 
       {!isNewApplication && (
         <>
-          <div className="flex gap-2 w-full justify-center pt-2 px-2">
-            <button
-              onClick={() => handleTabChange("fields")}
-              className={`${currentTab === "fields" ? "border-b-2 border-violet-600" : "border-b-2 border-gray-200"} px-3 py-1 rounded-none text-sm font-medium w-full text-center`}
-            >
-              Application Data
-            </button>
-            <button
-              onClick={() => handleTabChange("resume")}
-              className={`${currentTab === "resume" ? "border-b-2 border-violet-600" : "border-b-2 border-gray-200"} px-3 py-1 rounded-none text-sm font-medium w-full text-center`}
-            >
-              Resume
-            </button>
+          <div className="flex gap-1 w-full justify-center pt-2 px-2">
+            {(
+              [
+                ["fields", "Fields"],
+                ["answers", "Answers"],
+                ["resume", "Resume"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setCurrentTab(id)}
+                className={`${currentTab === id ? "border-b-2 border-violet-600" : "border-b-2 border-gray-200"} px-2 py-1 rounded-none text-sm font-medium w-full text-center`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
           {currentTab === "fields" && (
             <FieldsTab
@@ -167,6 +183,15 @@ export default function ApplicationScreen({
               onScan={onScan}
               onSync={onSync}
               onFill={onFill}
+            />
+          )}
+          {currentTab === "answers" && (
+            <AnswersTab
+              questions={savedQuestions}
+              fields={fields}
+              tabId={tabId}
+              filling={filling}
+              onFillMatching={onFillFromMemory}
             />
           )}
           {currentTab === "resume" && (

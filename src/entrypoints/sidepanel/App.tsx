@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RuntimeMessage, ScanFieldsResponse } from "@/lib/messages";
+import type { FieldAnswer, RuntimeMessage, ScanFieldsResponse } from "@/lib/messages";
 import { sendToRuntime, sendToTab } from "@/lib/messages";
 import type { AuthState, DetectedField } from "@/lib/types";
 import { getMe, openLogin } from "@/services/auth";
@@ -36,10 +36,12 @@ export default function App() {
   const [filling, setFilling] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [questionsRefreshKey, setQuestionsRefreshKey] = useState(0);
   const hydrated = useRef(false);
 
   const session = tabId != null ? sessions[tabId] : undefined;
   const fields = session?.fields ?? [];
+  const applicationId = session?.application?.id ?? null;
   const unsyncedCount = fields.filter((f) => !f.synced).length;
 
   const setTabFields = useCallback(
@@ -52,6 +54,10 @@ export default function App() {
     },
     [],
   );
+
+  const bumpQuestionsRefresh = useCallback(() => {
+    setQuestionsRefreshKey((k) => k + 1);
+  }, []);
 
   // Restore per-tab progress: Chrome can recreate the panel document on tab switches.
   useEffect(() => {
@@ -172,34 +178,72 @@ export default function App() {
     [tabId],
   );
 
+  const applyAnswersToTab = useCallback(
+    async (
+      tab: number,
+      answers: FieldAnswer[],
+      filledBy: "ai" | "saved",
+    ) => {
+      if (answers.length === 0) return;
+      await sendToTab(tab, { type: "FILL_FIELDS", payload: { answers } });
+      setTabFields(tab, (prev) =>
+        prev.map((f) => {
+          const answer = answers.find((a) => a.fieldId === f.id);
+          return answer
+            ? {
+                ...f,
+                value: answer.value,
+                filledBy,
+                synced: false,
+              }
+            : f;
+        }),
+      );
+    },
+    [setTabFields],
+  );
+
   const fillFields = useCallback(
     async (tab: number, targets: DetectedField[]) => {
-      if (targets.length === 0) return;
+      const emptyTargets = targets.filter((f) => f.value.trim() === "");
+      if (emptyTargets.length === 0) return;
+      const appId = sessions[tab]?.application?.id;
+      if (!appId) {
+        setError("Initiate or select an application before filling with AI.");
+        return;
+      }
       setFilling(true);
       setError(null);
       try {
-        const { answers } = await generateAnswers({ fields: targets });
-        await sendToTab(tab, { type: "FILL_FIELDS", payload: { answers } });
-        setTabFields(tab, (prev) =>
-          prev.map((f) => {
-            const answer = answers.find((a) => a.fieldId === f.id);
-            return answer
-              ? {
-                  ...f,
-                  value: answer.value,
-                  filledBy: "ai" as const,
-                  synced: false,
-                }
-              : f;
-          }),
-        );
+        const { answers } = await generateAnswers({
+          applicationId: appId,
+          fields: emptyTargets,
+        });
+        await applyAnswersToTab(tab, answers, "ai");
+        bumpQuestionsRefresh();
       } catch (e) {
         setError(`Fill failed: ${e instanceof Error ? e.message : e}`);
       } finally {
         setFilling(false);
       }
     },
-    [setTabFields],
+    [sessions, applyAnswersToTab, bumpQuestionsRefresh],
+  );
+
+  const fillFromMemory = useCallback(
+    async (tab: number, answers: FieldAnswer[]) => {
+      if (answers.length === 0) return;
+      setFilling(true);
+      setError(null);
+      try {
+        await applyAnswersToTab(tab, answers, "saved");
+      } catch (e) {
+        setError(`Fill failed: ${e instanceof Error ? e.message : e}`);
+      } finally {
+        setFilling(false);
+      }
+    },
+    [applyAnswersToTab],
   );
 
   // Messages from content scripts; sender.tab identifies which tab they came from.
@@ -233,7 +277,9 @@ export default function App() {
             const field = (prev[senderTab]?.fields ?? []).find(
               (f) => f.id === message.payload.fieldId,
             );
-            if (field) fillFields(senderTab, [field]);
+            if (field && field.value.trim() === "") {
+              fillFields(senderTab, [field]);
+            }
             return prev;
           });
           break;
@@ -285,17 +331,23 @@ export default function App() {
 
   const sync = useCallback(async () => {
     if (tabId == null) return;
+    if (!applicationId) {
+      setError("Initiate or select an application before syncing.");
+      return;
+    }
     setSyncing(true);
     setError(null);
     try {
-      await syncFields(fields);
+      const toSync = fields.filter((f) => f.value.trim() !== "");
+      await syncFields(applicationId, toSync);
       setTabFields(tabId, (prev) => prev.map((f) => ({ ...f, synced: true })));
+      bumpQuestionsRefresh();
     } catch (e) {
       setError(`Sync failed: ${e instanceof Error ? e.message : e}`);
     } finally {
       setSyncing(false);
     }
-  }, [tabId, fields, setTabFields]);
+  }, [tabId, applicationId, fields, setTabFields, bumpQuestionsRefresh]);
 
   return (
     <div className="flex h-screen flex-col bg-white text-sm text-gray-900">
@@ -340,8 +392,10 @@ export default function App() {
             onScan={scan}
             onSync={sync}
             onFill={fillFields}
-            applicationId={session.application?.id ?? null}
+            onFillFromMemory={fillFromMemory}
+            applicationId={applicationId}
             onApplicationCreated={handleApplicationCreated}
+            questionsRefreshKey={questionsRefreshKey}
           />
         )}
       </AuthGate>

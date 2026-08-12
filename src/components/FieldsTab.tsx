@@ -28,11 +28,14 @@ export default function FieldsTab({
   onSync,
   onFill,
 }: Props) {
+  const emptyFields = fields.filter((f) => f.value.trim() === "");
+
   return (
     <>
       <div className="flex flex-col gap-3 p-4">
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={onScan}
             disabled={scanning}
             className="flex flex-1 items-center gap-2 rounded-md border border-violet-600 px-3 py-2 font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50"
@@ -54,12 +57,17 @@ export default function FieldsTab({
 
         {fields.length > 0 && (
           <button
-            onClick={() => tabId != null && onFill(tabId, fields)}
-            disabled={filling}
+            type="button"
+            onClick={() => tabId != null && onFill(tabId, emptyFields)}
+            disabled={filling || emptyFields.length === 0}
             className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 font-medium text-white hover:bg-violet-700 disabled:opacity-50"
           >
             <Sparkles className="h-4 w-4" />
-            {filling ? "Filling…" : "Autofill all fields"}
+            {filling
+              ? "Filling…"
+              : emptyFields.length === 0
+                ? "All fields filled"
+                : `Fill with AI (${emptyFields.length})`}
           </button>
         )}
 

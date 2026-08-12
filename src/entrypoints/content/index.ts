@@ -69,6 +69,17 @@ export default defineContentScript({
       return el.name || 'Unlabeled field';
     }
 
+    function fieldRequired(el: FillableElement): boolean | null {
+      if (el.required) return true;
+      const aria = el.getAttribute('aria-required');
+      if (aria === 'true') return true;
+      if (aria === 'false') return false;
+      if (el.hasAttribute('required')) return true;
+      // Property false with no aria-required: treat as not required when the
+      // browser exposes a boolean required property (standard form controls).
+      return false;
+    }
+
     function scan(): DetectedField[] {
       removeOverlay();
       elements.clear();
@@ -89,6 +100,7 @@ export default defineContentScript({
           value: el.value,
           filledBy: 'none',
           synced: true,
+          required: fieldRequired(el),
         });
       });
       paintOverlay();

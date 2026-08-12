@@ -6,8 +6,10 @@ export interface DetectedField {
   kind: FieldKind;
   options?: string[];
   value: string;
-  filledBy: 'none' | 'ai' | 'user';
+  filledBy: 'none' | 'ai' | 'user' | 'saved';
   synced: boolean;
+  /** Native required / aria-required when known; null if unknown. */
+  required: boolean | null;
 }
 
 export interface User {

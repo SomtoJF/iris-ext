@@ -1,9 +1,32 @@
 import type { DetectedField } from '@/lib/types';
+import { syncApplicationData, type JobApplicationQuestions } from '@/services/jobs';
 
-// TODO: POST ${API_URL}/extension/sync — persists field state to job_application_data.
-// Mock: pretends the sync succeeded.
-export async function syncFields(fields: DetectedField[]): Promise<{ ok: true }> {
-  void fields;
-  await new Promise((r) => setTimeout(r, 500));
+function isOptional(field: DetectedField): boolean {
+  if (field.required === true) return false;
+  if (field.required === false) return true;
+  return false;
+}
+
+export async function syncFields(
+  applicationId: string,
+  fields: DetectedField[],
+): Promise<{ ok: true }> {
+  if (!applicationId) {
+    throw new Error('No application selected');
+  }
+
+  const questions: JobApplicationQuestions[] = fields
+    .filter((f) => f.value.trim() !== '')
+    .map((f) => ({
+      question: f.label,
+      answer: f.value,
+      is_optional: isOptional(f),
+    }));
+
+  if (questions.length === 0) {
+    return { ok: true };
+  }
+
+  await syncApplicationData(applicationId, questions);
   return { ok: true };
 }
