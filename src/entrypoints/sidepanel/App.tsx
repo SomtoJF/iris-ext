@@ -204,7 +204,7 @@ export default function App() {
   );
 
   const fillFields = useCallback(
-    async (tab: number, targets: DetectedField[]) => {
+    async (tab: number, targets: DetectedField[], contextUrls: string[] = []) => {
       const emptyTargets = targets.filter((f) => f.value.trim() === "");
       if (emptyTargets.length === 0) return;
       const appId = sessions[tab]?.application?.id;
@@ -218,6 +218,7 @@ export default function App() {
         const { answers } = await generateAnswers({
           applicationId: appId,
           fields: emptyTargets,
+          contextUrls,
         });
         await applyAnswersToTab(tab, answers, "ai");
         bumpQuestionsRefresh();

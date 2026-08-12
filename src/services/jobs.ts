@@ -163,12 +163,13 @@ interface AutofillEnvelope {
 export async function autofillApplication(
   applicationId: string,
   questions: AutofillQuestionInput[],
+  contextUrls: string[] = [],
 ): Promise<AutofillAnsweredQuestion[]> {
   const res = await fetch(`${API_URL}/extension/application/${applicationId}/autofill`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ questions }),
+    body: JSON.stringify({ questions, contextUrls }),
   });
   if (!res.ok) {
     const apiError = await readApiError(res);

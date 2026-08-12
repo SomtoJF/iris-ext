@@ -5,6 +5,7 @@ import { autofillApplication } from '@/services/jobs';
 export interface GenerateAnswersInput {
   applicationId: string;
   fields: DetectedField[];
+  contextUrls?: string[];
 }
 
 export async function generateAnswers(
@@ -21,6 +22,7 @@ export async function generateAnswers(
   const questions = await autofillApplication(
     input.applicationId,
     emptyFields.map((f) => ({ id: f.id, question: f.label })),
+    input.contextUrls ?? [],
   );
 
   return {

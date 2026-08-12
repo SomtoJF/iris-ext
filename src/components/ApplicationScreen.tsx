@@ -9,7 +9,6 @@ import {
   type JobApplicationSummary,
 } from "@/services/jobs";
 import { useState, useEffect, useCallback } from "react";
-import ResumeTab from "./ResumeTab";
 import FieldsTab from "./FieldsTab";
 import AnswersTab from "./AnswersTab";
 import { JobDescription } from "./JobDescription";
@@ -26,7 +25,7 @@ interface Props {
   unsyncedCount: number;
   onScan: () => void;
   onSync: () => void;
-  onFill: (tabId: number, fields: DetectedField[]) => void;
+  onFill: (tabId: number, fields: DetectedField[], contextUrls: string[]) => void;
   onFillFromMemory: (tabId: number, answers: FieldAnswer[]) => void;
   onApplicationCreated: (app: JobApplicationSummary) => void;
   questionsRefreshKey?: number;
@@ -50,9 +49,7 @@ export default function ApplicationScreen({
 }: Props) {
   const [completeApplication, setCompleteApplication] =
     useState<JobApplicationComprehensiveResponse | null>(null);
-  const [currentTab, setCurrentTab] = useState<"fields" | "answers" | "resume">(
-    "fields",
-  );
+  const [currentTab, setCurrentTab] = useState<"fields" | "answers">("fields");
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [isInitiatingApplication, setIsInitiatingApplication] = useState(false);
   const [initiateError, setInitiateError] = useState<string | null>(null);
@@ -153,19 +150,18 @@ export default function ApplicationScreen({
 
       {!isNewApplication && (
         <>
-          <div className="flex gap-1 w-full justify-center pt-2 px-2">
+          <div className="flex w-full justify-center gap-1 px-2 pt-2">
             {(
               [
                 ["fields", "Fields"],
                 ["answers", "Answers"],
-                ["resume", "Resume"],
               ] as const
             ).map(([id, label]) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => setCurrentTab(id)}
-                className={`${currentTab === id ? "border-b-2 border-violet-600" : "border-b-2 border-gray-200"} px-2 py-1 rounded-none text-sm font-medium w-full text-center`}
+                className={`${currentTab === id ? "border-b-2 border-violet-600" : "border-b-2 border-gray-200"} w-full rounded-none px-2 py-1 text-center text-sm font-medium`}
               >
                 {label}
               </button>
@@ -180,9 +176,13 @@ export default function ApplicationScreen({
               error={error}
               tabId={tabId}
               unsyncedCount={unsyncedCount}
+              applicationId={applicationId}
+              applicationResumeId={completeApplication?.resume.id ?? null}
+              resumes={resumes}
               onScan={onScan}
               onSync={onSync}
               onFill={onFill}
+              onApplicationResumeChange={handleApplicationResumeChange}
             />
           )}
           {currentTab === "answers" && (
@@ -192,14 +192,6 @@ export default function ApplicationScreen({
               tabId={tabId}
               filling={filling}
               onFillMatching={onFillFromMemory}
-            />
-          )}
-          {currentTab === "resume" && (
-            <ResumeTab
-              applicationId={applicationId}
-              applicationResumeId={completeApplication?.resume.id ?? null}
-              resumes={resumes}
-              onApplicationResumeChange={handleApplicationResumeChange}
             />
           )}
         </>
