@@ -25,7 +25,11 @@ interface Props {
   unsyncedCount: number;
   onScan: () => void;
   onSync: () => void;
-  onFill: (tabId: number, fields: DetectedField[], contextUrls: string[]) => void;
+  onFill: (
+    tabId: number,
+    fields: DetectedField[],
+    contextUrls: string[],
+  ) => void;
   onFillFromMemory: (tabId: number, answers: FieldAnswer[]) => void;
   onApplicationCreated: (app: JobApplicationSummary) => void;
   questionsRefreshKey?: number;
@@ -153,8 +157,8 @@ export default function ApplicationScreen({
           <div className="flex w-full justify-center gap-1 px-2 pt-2">
             {(
               [
-                ["fields", "Fields"],
-                ["answers", "Answers"],
+                ["fields", "Application Form"],
+                ["answers", "Saved Answers"],
               ] as const
             ).map(([id, label]) => (
               <button
