@@ -62,6 +62,8 @@ interface Props {
   onApplicationResumeChange: (resumeId: string) => void;
 }
 
+const MAX_CONTEXT_URLS = 3;
+
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return `${text.slice(0, max - 1)}…`;
@@ -176,9 +178,12 @@ export function FieldsComposer({
     }
   }
 
-  function addContextPage(tab: OpenTabOption) {
+  function toggleContextPage(tab: OpenTabOption) {
     setContextPages((prev) => {
-      if (prev.some((p) => p.url === tab.url)) return prev;
+      if (prev.some((p) => p.url === tab.url)) {
+        return prev.filter((p) => p.url !== tab.url);
+      }
+      if (prev.length >= MAX_CONTEXT_URLS) return prev;
       return [...prev, { url: tab.url, title: tab.title }];
     });
     setPlusOpen(false);
@@ -371,13 +376,15 @@ export function FieldsComposer({
                           const alreadyAdded = contextPages.some(
                             (p) => p.url === tab.url,
                           );
+                          const atLimit =
+                            contextPages.length >= MAX_CONTEXT_URLS;
                           return (
                             <button
                               key={tab.id}
                               type="button"
-                              disabled={alreadyAdded}
+                              disabled={!alreadyAdded && atLimit}
                               title={tab.url}
-                              onClick={() => addContextPage(tab)}
+                              onClick={() => toggleContextPage(tab)}
                               className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-xs hover:bg-muted disabled:opacity-40"
                             >
                               {tab.favIconUrl ? (
