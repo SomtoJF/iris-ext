@@ -5,6 +5,7 @@ import {
   FileScan,
   FileText,
   Globe,
+  LaptopMinimalCheck,
   MoreHorizontal,
   Plus,
   RefreshCcw,
@@ -205,7 +206,7 @@ export function FieldsComposer({
   return (
     <div className="shrink-0 border-t bg-background p-3">
       <div className="relative">
-        <div className="mb-1.5 flex justify-end">
+        <div className="mb-1.5 flex  gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -243,6 +244,17 @@ export function FieldsComposer({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <Button
+            type="button"
+            size="sm"
+            disabled={filling || tabId == null}
+            onClick={handleFill}
+            className="gap-1.5 bg-green-600 text-white hover:bg-green-700"
+          >
+            <LaptopMinimalCheck className="size-3.5" />
+            Mark as applied
+          </Button>
         </div>
 
         <Card size="sm" className="gap-2 py-2">
