@@ -198,3 +198,26 @@ export async function syncApplicationData(
     throw new Error(apiError ?? `Sync failed (${res.status})`);
   }
 }
+
+export async function markApplicationApplied(applicationId: string): Promise<void> {
+  const res = await fetch(
+    `${API_URL}/extension/application/${applicationId}/mark-as-applied`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+  if (!res.ok) {
+    const apiError = await readApiError(res);
+    switch (res.status) {
+      case 401:
+        throw new Error("Session expired. Log in to Iris again.");
+      case 409:
+        throw new Error(
+          apiError ?? "This application is still being filled by Iris. Wait until it finishes.",
+        );
+      default:
+        throw new Error(apiError ?? `Failed to mark as applied (${res.status})`);
+    }
+  }
+}

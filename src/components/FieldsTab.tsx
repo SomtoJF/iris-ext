@@ -19,6 +19,8 @@ interface Props {
   onSync: () => void;
   onFill: (tabId: number, fields: DetectedField[], contextUrls: string[]) => void;
   onApplicationResumeChange: (resumeId: string) => void;
+  applied?: boolean;
+  onMarkedApplied?: () => void;
 }
 
 export default function FieldsTab({
@@ -36,6 +38,8 @@ export default function FieldsTab({
   onSync,
   onFill,
   onApplicationResumeChange,
+  applied,
+  onMarkedApplied,
 }: Props) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -82,6 +86,8 @@ export default function FieldsTab({
         onSync={onSync}
         onFill={onFill}
         onApplicationResumeChange={onApplicationResumeChange}
+        applied={applied}
+        onMarkedApplied={onMarkedApplied}
       />
     </div>
   );

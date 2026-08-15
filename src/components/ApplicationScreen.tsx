@@ -32,6 +32,7 @@ interface Props {
   ) => void;
   onFillFromMemory: (tabId: number, answers: FieldAnswer[]) => void;
   onApplicationCreated: (app: JobApplicationSummary) => void;
+  onMarkedApplied?: () => void;
   questionsRefreshKey?: number;
 }
 
@@ -49,6 +50,7 @@ export default function ApplicationScreen({
   onFill,
   onFillFromMemory,
   onApplicationCreated,
+  onMarkedApplied,
   questionsRefreshKey = 0,
 }: Props) {
   const [completeApplication, setCompleteApplication] =
@@ -187,6 +189,13 @@ export default function ApplicationScreen({
               onSync={onSync}
               onFill={onFill}
               onApplicationResumeChange={handleApplicationResumeChange}
+              applied={completeApplication?.status === "applied"}
+              onMarkedApplied={() => {
+                setCompleteApplication((prev) =>
+                  prev ? { ...prev, status: "applied" } : prev,
+                );
+                onMarkedApplied?.();
+              }}
             />
           )}
           {currentTab === "answers" && (

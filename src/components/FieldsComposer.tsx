@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import type { DetectedField } from "@/lib/types";
 import type { Resume } from "@/services/resume";
-import { patchJobApplication } from "@/services/jobs";
+import { patchJobApplication, markApplicationApplied } from "@/services/jobs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,6 +61,8 @@ interface Props {
     contextUrls: string[],
   ) => void;
   onApplicationResumeChange: (resumeId: string) => void;
+  applied?: boolean;
+  onMarkedApplied?: () => void;
 }
 
 const MAX_CONTEXT_URLS = 3;
@@ -84,12 +86,16 @@ export function FieldsComposer({
   onSync,
   onFill,
   onApplicationResumeChange,
+  applied = false,
+  onMarkedApplied,
 }: Props) {
   const emptyFields = fields.filter((f) => f.value.trim() === "");
   const [contextPages, setContextPages] = useState<ContextPageChip[]>([]);
   const [resumeOpen, setResumeOpen] = useState(false);
   const [resumeQuery, setResumeQuery] = useState("");
   const [resumeLoading, setResumeLoading] = useState(false);
+  const [markingApplied, setMarkingApplied] = useState(false);
+  const [markAppliedError, setMarkAppliedError] = useState<string | null>(null);
   const [plusOpen, setPlusOpen] = useState(false);
   const [tabsQuery, setTabsQuery] = useState("");
   const [openTabs, setOpenTabs] = useState<OpenTabOption[]>([]);
@@ -203,6 +209,25 @@ export function FieldsComposer({
     );
   }
 
+  async function handleMarkAsApplied() {
+    if (applicationId == null || applied || markingApplied) return;
+    const confirmed = window.confirm(
+      "Mark this application as applied? Please sync your application data first. After marking as applied, you won't be able to edit it.",
+    );
+    if (!confirmed) return;
+
+    setMarkAppliedError(null);
+    setMarkingApplied(true);
+    try {
+      await markApplicationApplied(applicationId);
+      onMarkedApplied?.();
+    } catch (e) {
+      setMarkAppliedError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMarkingApplied(false);
+    }
+  }
+
   return (
     <div className="shrink-0 border-t bg-background p-3">
       <div className="relative">
@@ -248,14 +273,23 @@ export function FieldsComposer({
           <Button
             type="button"
             size="sm"
-            disabled={filling || tabId == null}
-            onClick={handleFill}
+            disabled={
+              markingApplied || filling || applied || applicationId == null
+            }
+            onClick={handleMarkAsApplied}
             className="gap-1.5 bg-green-600 text-white hover:bg-green-700"
           >
             <LaptopMinimalCheck className="size-3.5" />
-            Mark as applied
+            {applied
+              ? "Applied"
+              : markingApplied
+                ? "Marking…"
+                : "Mark as applied"}
           </Button>
         </div>
+        {markAppliedError && (
+          <p className="mb-1.5 text-xs text-red-600">{markAppliedError}</p>
+        )}
 
         <Card size="sm" className="gap-2 py-2">
           <CardContent className="flex flex-col gap-2 px-2.5">
@@ -425,7 +459,12 @@ export function FieldsComposer({
               <Button
                 type="button"
                 size="sm"
-                disabled={filling || emptyFields.length === 0 || tabId == null}
+                disabled={
+                  filling ||
+                  applied ||
+                  emptyFields.length === 0 ||
+                  tabId == null
+                }
                 onClick={handleFill}
                 className="gap-1.5 bg-violet-600 text-white hover:bg-violet-700"
               >

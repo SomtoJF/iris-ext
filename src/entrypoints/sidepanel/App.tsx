@@ -178,6 +178,21 @@ export default function App() {
     [tabId],
   );
 
+  const handleMarkedApplied = useCallback(() => {
+    if (tabId == null) return;
+    setSessions((prev) => {
+      const s = prev[tabId];
+      if (!s?.application) return prev;
+      return {
+        ...prev,
+        [tabId]: {
+          ...s,
+          application: { ...s.application, status: "applied" },
+        },
+      };
+    });
+  }, [tabId]);
+
   const applyAnswersToTab = useCallback(
     async (
       tab: number,
@@ -396,6 +411,7 @@ export default function App() {
             onFillFromMemory={fillFromMemory}
             applicationId={applicationId}
             onApplicationCreated={handleApplicationCreated}
+            onMarkedApplied={handleMarkedApplied}
             questionsRefreshKey={questionsRefreshKey}
           />
         )}
