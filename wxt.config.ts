@@ -13,7 +13,7 @@ export default defineConfig({
     name: 'Iris',
     description: 'AI-assisted job applications',
     permissions: ['sidePanel', 'activeTab', 'scripting', 'tabs', 'storage'],
-    host_permissions: ['http://api.applywithiris.com/*'],
+    host_permissions: ['https://api.applywithiris.com/*'],
     optional_host_permissions: ['http://*/*', 'https://*/*'],
     action: {
       default_title: 'Open Iris',
