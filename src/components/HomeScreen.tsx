@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CirclePlus } from "lucide-react";
+import { CirclePlus, SquareArrowOutUpRight } from "lucide-react";
 import type { JobApplicationSummary } from "@/services/jobs";
 import { fetchIncompleteApplications } from "@/services/jobs";
 
@@ -13,11 +13,14 @@ const statusStyles: Record<string, string> = {
 
 interface Props {
   onContinue: (app: JobApplicationSummary) => void;
+  onOpen: (url: string) => void;
   onNew: () => void;
 }
 
-export function HomeScreen({ onContinue, onNew }: Props) {
-  const [applications, setApplications] = useState<JobApplicationSummary[] | null>(null);
+export function HomeScreen({ onContinue, onOpen, onNew }: Props) {
+  const [applications, setApplications] = useState<
+    JobApplicationSummary[] | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,29 +43,58 @@ export function HomeScreen({ onContinue, onNew }: Props) {
         Unfinished applications
       </h2>
 
-      {error && <p className="rounded-md bg-red-50 p-2 text-xs text-red-700">{error}</p>}
-      {applications == null && !error && <p className="text-center text-xs text-gray-400">Loading…</p>}
+      {error && (
+        <p className="rounded-md bg-red-50 p-2 text-xs text-red-700">{error}</p>
+      )}
+      {applications == null && !error && (
+        <p className="text-center text-xs text-gray-400">Loading…</p>
+      )}
       {applications?.length === 0 && (
-        <p className="text-center text-xs text-gray-400">Nothing unfinished. Start a new application.</p>
+        <p className="text-center text-xs text-gray-400">
+          Nothing unfinished. Start a new application.
+        </p>
       )}
 
       <ul className="flex flex-col gap-2">
         {applications?.map((app) => (
-          <li key={app.id}>
+          <li
+            key={app.id}
+            className="rounded-md border border-gray-200 p-3 hover:border-violet-400 hover:bg-violet-50"
+          >
             <button
+              type="button"
               onClick={() => onContinue(app)}
-              className="w-full rounded-md border border-gray-200 p-3 text-left hover:border-violet-400 hover:bg-violet-50"
+              className="w-full text-left"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-medium">{app.jobTitle}</span>
+                <span className="truncate text-xs font-medium">
+                  {app.jobTitle}
+                </span>
                 <span
                   className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${statusStyles[app.status] ?? "bg-gray-100 text-gray-500"}`}
                 >
                   {app.status}
                 </span>
               </div>
-              <p className="mt-1 truncate text-xs text-gray-500">{app.companyName}</p>
             </button>
+            <div className="mt-1 flex items-center gap-2 text-xs">
+              <p className="min-w-0 truncate text-xs text-gray-500 border-r pr-2">
+                {app.companyName}
+              </p>
+
+              <a
+                href={app.url}
+                aria-label="To application"
+                className="shrink-0 rounded p-0.5 text-violet-500 hover:text-violet-600 inline-flex items-center gap-1"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onOpen(app.url);
+                }}
+              >
+                Link <SquareArrowOutUpRight className="h-3 w-3" />
+              </a>
+            </div>
           </li>
         ))}
       </ul>

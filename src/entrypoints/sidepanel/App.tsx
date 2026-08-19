@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FieldAnswer, RuntimeMessage, ScanFieldsResponse } from "@/lib/messages";
-import { sendToRuntime, sendToTab } from "@/lib/messages";
+import type {
+  FieldAnswer,
+  InjectContentResponse,
+  RuntimeMessage,
+  ScanFieldsResponse,
+} from "@/lib/messages";
+import {
+  OPTIONAL_HTTP_ORIGINS,
+  scopeFieldId,
+  sendToRuntime,
+  sendToTab,
+  unscopeFieldId,
+} from "@/lib/messages";
 import type { AuthState, DetectedField } from "@/lib/types";
 import { getMe, openLogin } from "@/services/auth";
 import { generateAnswers } from "@/services/fill";
@@ -20,12 +31,8 @@ type SessionsByTab = Record<number, TabSession>;
 
 const STORAGE_KEY = "sessionsByTab";
 
-function sameOrigin(a: string, b: string): boolean {
-  try {
-    return new URL(a).origin === new URL(b).origin;
-  } catch {
-    return false;
-  }
+function isHttpUrl(url: string): boolean {
+  return /^https?:/.test(url);
 }
 
 export default function App() {
@@ -103,21 +110,18 @@ export default function App() {
     };
   }, [refreshAuth]);
 
-  // Track the active tab. On navigation: keep the application association while
-  // staying on the same site (multi-page forms), otherwise drop the session.
+  // Track the active tab. On navigation, keep the application on this tab
+  // (multi-page / cross-origin ATS flows) and only clear scanned fields —
+  // the content script dies on full page load and must be re-injected.
   useEffect(() => {
     const onActivated = (info: { tabId: number }) => setTabId(info.tabId);
     const onUpdated = (id: number, info: { url?: string }) => {
-      if (!info.url) return;
+      if (!info.url || !isHttpUrl(info.url)) return;
       setSessions((prev) => {
         const s = prev[id];
         if (!s) return prev;
-        const appUrl = s.application?.url;
-        if (appUrl && sameOrigin(appUrl, info.url!)) {
-          return { ...prev, [id]: { ...s, fields: [] } };
-        }
-        const { [id]: _dropped, ...rest } = prev;
-        return rest;
+        if (s.fields.length === 0) return prev;
+        return { ...prev, [id]: { ...s, fields: [] } };
       });
     };
     const onRemoved = (id: number) =>
@@ -141,21 +145,22 @@ export default function App() {
   }, [tabId]);
 
   const continueApplication = useCallback(
-    async (app: JobApplicationSummary) => {
-      const tab = await browser.tabs.create({ url: app.url });
-      if (tab.id == null) return;
-      // Panel is per-tab: enable it on the new tab so it stays visible there.
-      await browser.sidePanel.setOptions({
-        tabId: tab.id,
-        path: "sidepanel.html",
-        enabled: true,
-      });
+    (app: JobApplicationSummary) => {
+      if (tabId == null) return;
       setSessions((prev) => ({
         ...prev,
-        [tab.id!]: { application: app, fields: [] },
+        [tabId]: { application: app, fields: [] },
       }));
     },
-    [],
+    [tabId],
+  );
+
+  const openApplicationUrl = useCallback(
+    async (url: string) => {
+      if (tabId == null) return;
+      await browser.tabs.update(tabId, { url });
+    },
+    [tabId],
   );
 
   const goHome = useCallback(() => {
@@ -200,7 +205,18 @@ export default function App() {
       filledBy: "ai" | "saved",
     ) => {
       if (answers.length === 0) return;
-      await sendToTab(tab, { type: "FILL_FIELDS", payload: { answers } });
+      const byFrame = new Map<number, FieldAnswer[]>();
+      for (const answer of answers) {
+        const { frameId, localId } = unscopeFieldId(answer.fieldId);
+        const list = byFrame.get(frameId) ?? [];
+        list.push({ fieldId: localId, value: answer.value });
+        byFrame.set(frameId, list);
+      }
+      await Promise.all(
+        [...byFrame].map(([frameId, frameAnswers]) =>
+          sendToTab(tab, { type: "FILL_FIELDS", payload: { answers: frameAnswers } }, frameId),
+        ),
+      );
       setTabFields(tab, (prev) =>
         prev.map((f) => {
           const answer = answers.find((a) => a.fieldId === f.id);
@@ -266,18 +282,26 @@ export default function App() {
   useEffect(() => {
     const listener = (
       message: RuntimeMessage,
-      sender: { tab?: { id?: number } },
+      sender: { tab?: { id?: number }; frameId?: number },
     ) => {
       const senderTab = sender.tab?.id;
       if (senderTab == null) return;
+      const scopedId = (localId: string) =>
+        scopeFieldId(sender.frameId ?? 0, localId);
       switch (message.type) {
         case "FIELDS_DETECTED":
-          setTabFields(senderTab, () => message.payload.fields);
+          setTabFields(senderTab, () =>
+            message.payload.fields.map((f) => ({
+              ...f,
+              id: scopedId(f.id),
+              frameId: sender.frameId ?? 0,
+            })),
+          );
           break;
         case "FIELD_EDITED":
           setTabFields(senderTab, (prev) =>
             prev.map((f) =>
-              f.id === message.payload.fieldId
+              f.id === scopedId(message.payload.fieldId)
                 ? {
                     ...f,
                     value: message.payload.value,
@@ -291,7 +315,7 @@ export default function App() {
         case "FILL_REQUESTED": {
           setSessions((prev) => {
             const field = (prev[senderTab]?.fields ?? []).find(
-              (f) => f.id === message.payload.fieldId,
+              (f) => f.id === scopedId(message.payload.fieldId),
             );
             if (field && field.value.trim() === "") {
               fillFields(senderTab, [field]);
@@ -321,23 +345,39 @@ export default function App() {
         );
       }
       setTabId(tab.id);
-      // activeTab evaporates on navigation; ask for persistent per-site access instead.
-      const origin = `${new URL(tab.url!).origin}/*`;
+      // activeTab evaporates on navigation. Request all http(s) origins so
+      // cross-origin ATS iframes (Greenhouse, etc.) are injectable too.
       const granted =
-        (await browser.permissions.contains({ origins: [origin] })) ||
-        (await browser.permissions.request({ origins: [origin] }));
+        (await browser.permissions.contains({ origins: OPTIONAL_HTTP_ORIGINS })) ||
+        (await browser.permissions.request({ origins: OPTIONAL_HTTP_ORIGINS }));
       if (!granted)
         throw new Error("Permission to access this site was declined.");
-      const inject = await sendToRuntime<{ ok: boolean; error?: string }>({
+      const inject = await sendToRuntime<InjectContentResponse>({
         type: "INJECT_CONTENT",
         payload: { tabId: tab.id },
       });
       if (!inject?.ok)
         throw new Error(inject?.error ?? "Could not inject into the page");
-      const res = await sendToTab<ScanFieldsResponse>(tab.id, {
-        type: "SCAN_FIELDS",
-      });
-      setTabFields(tab.id, () => res.fields);
+      const frameIds = inject.frameIds?.length ? inject.frameIds : [0];
+      const perFrame = await Promise.all(
+        frameIds.map(async (frameId) => {
+          try {
+            const res = await sendToTab<ScanFieldsResponse>(
+              tab.id!,
+              { type: "SCAN_FIELDS" },
+              frameId,
+            );
+            return (res.fields ?? []).map((f) => ({
+              ...f,
+              id: scopeFieldId(frameId, f.id),
+              frameId,
+            }));
+          } catch {
+            return [];
+          }
+        }),
+      );
+      setTabFields(tab.id, () => perFrame.flat());
     } catch (e) {
       setError(`Scan failed: ${e instanceof Error ? e.message : e}`);
     } finally {
@@ -395,7 +435,11 @@ export default function App() {
 
       <AuthGate auth={auth} onLogin={openLogin}>
         {!session ? (
-          <HomeScreen onContinue={continueApplication} onNew={startNew} />
+          <HomeScreen
+            onContinue={continueApplication}
+            onOpen={openApplicationUrl}
+            onNew={startNew}
+          />
         ) : (
           <ApplicationScreen
             fields={fields}

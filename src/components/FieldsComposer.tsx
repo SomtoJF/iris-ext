@@ -305,7 +305,9 @@ export function FieldsComposer({
                 >
                   <FileText className="size-3 shrink-0" />
                   <span className="truncate">
-                    {selectedResume?.fileName ?? "Select resume"}
+                    {selectedResume?.displayName ||
+                      selectedResume?.fileName ||
+                      "Select resume"}
                   </span>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-64 p-2" side="top">
@@ -337,7 +339,7 @@ export function FieldsComposer({
                             }`}
                           >
                             <span className="truncate font-medium">
-                              {resume.fileName}
+                              {resume.displayName || resume.fileName}
                             </span>
                             {selected && (
                               <Badge

@@ -6,6 +6,7 @@ interface ResumeEnvelope {
 
 export interface Resume {
   id: string;
+  displayName: string;
   fileName: string;
   fileSize: number;
   fileKey: string;
