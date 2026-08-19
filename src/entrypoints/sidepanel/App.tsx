@@ -1,17 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  FieldAnswer,
-  InjectContentResponse,
-  RuntimeMessage,
-  ScanFieldsResponse,
-} from "@/lib/messages";
-import {
-  OPTIONAL_HTTP_ORIGINS,
-  scopeFieldId,
-  sendToRuntime,
-  sendToTab,
-  unscopeFieldId,
-} from "@/lib/messages";
+import type { FieldAnswer, RuntimeMessage, ScanFieldsResponse } from "@/lib/messages";
+import { sendToRuntime, sendToTab } from "@/lib/messages";
 import type { AuthState, DetectedField } from "@/lib/types";
 import { getMe, openLogin } from "@/services/auth";
 import { generateAnswers } from "@/services/fill";
@@ -205,18 +194,7 @@ export default function App() {
       filledBy: "ai" | "saved",
     ) => {
       if (answers.length === 0) return;
-      const byFrame = new Map<number, FieldAnswer[]>();
-      for (const answer of answers) {
-        const { frameId, localId } = unscopeFieldId(answer.fieldId);
-        const list = byFrame.get(frameId) ?? [];
-        list.push({ fieldId: localId, value: answer.value });
-        byFrame.set(frameId, list);
-      }
-      await Promise.all(
-        [...byFrame].map(([frameId, frameAnswers]) =>
-          sendToTab(tab, { type: "FILL_FIELDS", payload: { answers: frameAnswers } }, frameId),
-        ),
-      );
+      await sendToTab(tab, { type: "FILL_FIELDS", payload: { answers } });
       setTabFields(tab, (prev) =>
         prev.map((f) => {
           const answer = answers.find((a) => a.fieldId === f.id);
@@ -282,26 +260,18 @@ export default function App() {
   useEffect(() => {
     const listener = (
       message: RuntimeMessage,
-      sender: { tab?: { id?: number }; frameId?: number },
+      sender: { tab?: { id?: number } },
     ) => {
       const senderTab = sender.tab?.id;
       if (senderTab == null) return;
-      const scopedId = (localId: string) =>
-        scopeFieldId(sender.frameId ?? 0, localId);
       switch (message.type) {
         case "FIELDS_DETECTED":
-          setTabFields(senderTab, () =>
-            message.payload.fields.map((f) => ({
-              ...f,
-              id: scopedId(f.id),
-              frameId: sender.frameId ?? 0,
-            })),
-          );
+          setTabFields(senderTab, () => message.payload.fields);
           break;
         case "FIELD_EDITED":
           setTabFields(senderTab, (prev) =>
             prev.map((f) =>
-              f.id === scopedId(message.payload.fieldId)
+              f.id === message.payload.fieldId
                 ? {
                     ...f,
                     value: message.payload.value,
@@ -315,7 +285,7 @@ export default function App() {
         case "FILL_REQUESTED": {
           setSessions((prev) => {
             const field = (prev[senderTab]?.fields ?? []).find(
-              (f) => f.id === scopedId(message.payload.fieldId),
+              (f) => f.id === message.payload.fieldId,
             );
             if (field && field.value.trim() === "") {
               fillFields(senderTab, [field]);
@@ -345,39 +315,23 @@ export default function App() {
         );
       }
       setTabId(tab.id);
-      // activeTab evaporates on navigation. Request all http(s) origins so
-      // cross-origin ATS iframes (Greenhouse, etc.) are injectable too.
+      // activeTab evaporates on navigation; ask for persistent per-site access instead.
+      const origin = `${new URL(tab.url!).origin}/*`;
       const granted =
-        (await browser.permissions.contains({ origins: OPTIONAL_HTTP_ORIGINS })) ||
-        (await browser.permissions.request({ origins: OPTIONAL_HTTP_ORIGINS }));
+        (await browser.permissions.contains({ origins: [origin] })) ||
+        (await browser.permissions.request({ origins: [origin] }));
       if (!granted)
         throw new Error("Permission to access this site was declined.");
-      const inject = await sendToRuntime<InjectContentResponse>({
+      const inject = await sendToRuntime<{ ok: boolean; error?: string }>({
         type: "INJECT_CONTENT",
         payload: { tabId: tab.id },
       });
       if (!inject?.ok)
         throw new Error(inject?.error ?? "Could not inject into the page");
-      const frameIds = inject.frameIds?.length ? inject.frameIds : [0];
-      const perFrame = await Promise.all(
-        frameIds.map(async (frameId) => {
-          try {
-            const res = await sendToTab<ScanFieldsResponse>(
-              tab.id!,
-              { type: "SCAN_FIELDS" },
-              frameId,
-            );
-            return (res.fields ?? []).map((f) => ({
-              ...f,
-              id: scopeFieldId(frameId, f.id),
-              frameId,
-            }));
-          } catch {
-            return [];
-          }
-        }),
-      );
-      setTabFields(tab.id, () => perFrame.flat());
+      const res = await sendToTab<ScanFieldsResponse>(tab.id, {
+        type: "SCAN_FIELDS",
+      });
+      setTabFields(tab.id, () => res.fields);
     } catch (e) {
       setError(`Scan failed: ${e instanceof Error ? e.message : e}`);
     } finally {

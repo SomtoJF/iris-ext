@@ -24,8 +24,8 @@ side panel (React UI, all API fetches) ⇄ content script (DOM scan/fill) ; back
 ```
 
 - `src/entrypoints/sidepanel/` — main UI. Auth gate → scan / complete-application / sync buttons + field list. Owns ALL API calls (fill/sync stubs run here, triggered by content-script messages).
-- `src/entrypoints/content/index.ts` — runtime-registered (`registration: 'runtime'`, NOT in manifest matches); injected on demand by background via `scripting.executeScript` into **all frames**. Scans visible text inputs/textareas/selects, tags them `data-iris-id`, paints fill buttons in ONE shadow-DOM overlay (positions tracked on scroll/resize), writes values via native setter + `input`/`change` events (required for React-controlled forms; `programmaticWrite` flag stops the edit watcher from seeing AI writes), reports manual edits.
-- `src/entrypoints/background.ts` — `sidePanel.setPanelBehavior({openPanelOnActionClick})`; handles `INJECT_CONTENT` with `allFrames: true` (file path must be `/content-scripts/content.js` — leading slash).
+- `src/entrypoints/content/index.ts` — runtime-registered (`registration: 'runtime'`, NOT in manifest matches); injected on demand by background via `scripting.executeScript`. Scans visible text inputs/textareas/selects, tags them `data-iris-id`, paints fill buttons in ONE shadow-DOM overlay (positions tracked on scroll/resize), writes values via native setter + `input`/`change` events (required for React-controlled forms; `programmaticWrite` flag stops the edit watcher from seeing AI writes), reports manual edits.
+- `src/entrypoints/background.ts` — `sidePanel.setPanelBehavior({openPanelOnActionClick})`; handles `INJECT_CONTENT` (file path must be `/content-scripts/content.js` — leading slash).
 - `src/lib/messages.ts` — single source of truth for the typed messaging protocol (panel⇄content via `tabs.sendMessage`, content/panel→background via `runtime.sendMessage`). Extend the discriminated unions there.
 - `src/lib/types.ts` — `DetectedField` (id/label/kind/value/filledBy/synced), `AuthState`.
 - `src/services/auth.ts` — real: `GET ${API_URL}/me` with `credentials: 'include'`.
@@ -37,9 +37,8 @@ iris-api keeps a JWT in the HttpOnly `Access_Token` cookie; `GET /me` → user o
 
 ## Permissions model
 
-- `activeTab` alone is insufficient: it's granted on icon click and revoked on navigation, so Scan clicks inside the panel fail. Scan therefore requests `http://*/*` and `https://*/*` at click time via `permissions.request({origins})` against `optional_host_permissions` (needed for cross-origin ATS iframes). Keep this pattern; don't add `<all_urls>` to `host_permissions`.
+- `activeTab` alone is insufficient: it's granted on icon click and revoked on navigation, so Scan clicks inside the panel fail. Scan therefore requests persistent per-site access at click time via `permissions.request({origins})` against `optional_host_permissions: ['http://*/*', 'https://*/*']`. Keep this pattern; don't add `<all_urls>` to `host_permissions`.
 - `permissions.request` must run in a user gesture (button click handler).
-- Panel SCAN/FILL messages are sent per `frameId`; field ids are prefixed with `frameId:` so fills route back to the owning frame.
 
 ## Gotchas
 

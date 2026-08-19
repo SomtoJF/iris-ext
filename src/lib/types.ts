@@ -10,8 +10,6 @@ export interface DetectedField {
   synced: boolean;
   /** Native required / aria-required when known; null if unknown. */
   required: boolean | null;
-  /** Frame that owns the control. Stamped by the panel after scan. */
-  frameId?: number;
 }
 
 export interface User {
