@@ -55,7 +55,6 @@ export interface JobApplicationComprehensiveResponse {
 }
 
 // Non-completed applications: GET /jobs with status_not=applied
-// (endpoint already excludes cover-letter-only rows).
 export async function fetchIncompleteApplications(
   page = 1,
   limit = 20,
