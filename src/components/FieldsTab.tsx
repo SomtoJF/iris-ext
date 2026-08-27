@@ -1,50 +1,15 @@
 import { FileScan } from "lucide-react";
 import type { DetectedField } from "@/lib/types";
-import type { Resume } from "@/services/resume";
 import { FieldList } from "@/components/FieldList";
-import { FieldsComposer } from "@/components/FieldsComposer";
 
 interface Props {
   fields: DetectedField[];
   scanning: boolean;
-  filling: boolean;
-  generatingCoverLetter: boolean;
-  syncing: boolean;
   error: string | null;
-  tabId: number | null;
-  unsyncedCount: number;
-  applicationId: string | null;
-  applicationResumeId: string | null;
-  resumes: Resume[];
   onScan: () => void;
-  onSync: () => Promise<void>;
-  onFill: (tabId: number, fields: DetectedField[], contextUrls: string[]) => void;
-  onGenerateCoverLetter: (resumeId: string | null) => void;
-  onApplicationResumeChange: (resumeId: string) => void;
-  applied?: boolean;
-  onMarkedApplied?: () => void;
 }
 
-export default function FieldsTab({
-  fields,
-  scanning,
-  filling,
-  generatingCoverLetter,
-  syncing,
-  error,
-  tabId,
-  unsyncedCount,
-  applicationId,
-  applicationResumeId,
-  resumes,
-  onScan,
-  onSync,
-  onFill,
-  onGenerateCoverLetter,
-  onApplicationResumeChange,
-  applied,
-  onMarkedApplied,
-}: Props) {
+export default function FieldsTab({ fields, scanning, error, onScan }: Props) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {error && (
@@ -75,26 +40,6 @@ export default function FieldsTab({
           </div>
         )}
       </div>
-
-      <FieldsComposer
-        fields={fields}
-        scanning={scanning}
-        filling={filling}
-        generatingCoverLetter={generatingCoverLetter}
-        syncing={syncing}
-        tabId={tabId}
-        unsyncedCount={unsyncedCount}
-        applicationId={applicationId}
-        applicationResumeId={applicationResumeId}
-        resumes={resumes}
-        onScan={onScan}
-        onSync={onSync}
-        onFill={onFill}
-        onGenerateCoverLetter={onGenerateCoverLetter}
-        onApplicationResumeChange={onApplicationResumeChange}
-        applied={applied}
-        onMarkedApplied={onMarkedApplied}
-      />
     </div>
   );
 }
