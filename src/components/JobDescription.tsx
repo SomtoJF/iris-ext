@@ -1,10 +1,27 @@
+"use client";
+
+import { Copy } from "lucide-react";
 import Markdown from "react-markdown";
+import { Button } from "./ui/button";
 
 interface Props {
   markdown: string;
 }
 
 export function JobDescription({ markdown }: Props) {
+  const [showCopied, setShowCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(markdown);
+  };
+
+  useEffect(() => {
+    if (showCopied) {
+      setTimeout(() => {
+        setShowCopied(false);
+      }, 1500);
+    }
+  }, [showCopied]);
+
   return (
     <div className="mx-auto max-h-64 overflow-y-auto border border-gray-200 p-4">
       <h2 className="mb-2 text-xs font-bold uppercase text-gray-800">
@@ -64,6 +81,21 @@ export function JobDescription({ markdown }: Props) {
         >
           {markdown}
         </Markdown>
+        <div>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              handleCopy();
+              setShowCopied(true);
+            }}
+            variant="outline"
+            className="w-fit px-1.5 text-xs"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            {showCopied && "Copied!"}
+          </Button>
+        </div>
       </div>
     </div>
   );

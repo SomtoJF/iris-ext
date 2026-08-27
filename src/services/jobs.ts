@@ -9,6 +9,8 @@ export type JobApplicationStatus =
   | "halted" 
   | "pending";
 
+export type CoverLetterStatus = "processing" | "ready" | "failed";
+
 export interface JobApplicationSummary {
   id: string;
   url: string;
@@ -49,6 +51,7 @@ export interface JobApplicationComprehensiveResponse {
   companyName: string;
   status: JobApplicationStatus;
   coverLetter: string | null;
+  coverLetterStatus?: CoverLetterStatus;
   questions: JobApplicationQuestions[] | null;
   jobDescription: string;
   resume: ResumeSummary;
@@ -219,4 +222,29 @@ export async function markApplicationApplied(applicationId: string): Promise<voi
         throw new Error(apiError ?? `Failed to mark as applied (${res.status})`);
     }
   }
+}
+
+export interface GenerateCoverLetterResponse {
+  id: string;
+  status: CoverLetterStatus;
+}
+
+export async function generateCoverLetter(
+  applicationId: string,
+  { resumeId }: { resumeId?: string | null } = {},
+): Promise<GenerateCoverLetterResponse> {
+  const res = await fetch(
+    `${API_URL}/extension/application/${applicationId}/generate-cover-letter`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resumeId: resumeId ?? "" }),
+    },
+  );
+  if (!res.ok) {
+    const apiError = await readApiError(res);
+    throw new Error(apiError ?? `Failed to generate cover letter (${res.status})`);
+  }
+  return (await res.json()) as GenerateCoverLetterResponse;
 }

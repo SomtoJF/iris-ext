@@ -5,7 +5,11 @@ import type { AuthState, DetectedField } from "@/lib/types";
 import { getMe, openLogin } from "@/services/auth";
 import { generateAnswers } from "@/services/fill";
 import { syncFields } from "@/services/sync";
-import type { JobApplicationSummary } from "@/services/jobs";
+import {
+  fetchApplicationComprehensive,
+  generateCoverLetter,
+  type JobApplicationSummary,
+} from "@/services/jobs";
 import ApplicationScreen from "@/components/ApplicationScreen";
 import { AuthGate } from "@/components/AuthGate";
 import { HomeScreen } from "@/components/HomeScreen";
@@ -19,9 +23,17 @@ interface TabSession {
 type SessionsByTab = Record<number, TabSession>;
 
 const STORAGE_KEY = "sessionsByTab";
+const COVER_LETTER_POLL_MS = 3000;
+const COVER_LETTER_TIMEOUT_MS = 3 * 60 * 1000;
+const COVER_LETTER_FIELD = /cover\s*letter/i;
+const SYNC_DEBOUNCE_MS = 3000;
 
 function isHttpUrl(url: string): boolean {
   return /^https?:/.test(url);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export default function App() {
@@ -30,15 +42,22 @@ export default function App() {
   const [sessions, setSessions] = useState<SessionsByTab>({});
   const [scanning, setScanning] = useState(false);
   const [filling, setFilling] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const [generatingCoverLetter, setGeneratingCoverLetter] = useState(false);
+  const [syncingTabs, setSyncingTabs] = useState<Set<number>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [questionsRefreshKey, setQuestionsRefreshKey] = useState(0);
   const hydrated = useRef(false);
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+  const syncTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>(
+    {},
+  );
 
   const session = tabId != null ? sessions[tabId] : undefined;
   const fields = session?.fields ?? [];
   const applicationId = session?.application?.id ?? null;
   const unsyncedCount = fields.filter((f) => !f.synced).length;
+  const syncing = tabId != null && syncingTabs.has(tabId);
 
   const setTabFields = useCallback(
     (tab: number, update: (prev: DetectedField[]) => DetectedField[]) => {
@@ -113,11 +132,17 @@ export default function App() {
         return { ...prev, [id]: { ...s, fields: [] } };
       });
     };
-    const onRemoved = (id: number) =>
+    const onRemoved = (id: number) => {
+      const timer = syncTimersRef.current[id];
+      if (timer) {
+        clearTimeout(timer);
+        delete syncTimersRef.current[id];
+      }
       setSessions((prev) => {
         const { [id]: _dropped, ...rest } = prev;
         return rest;
       });
+    };
     browser.tabs.onActivated.addListener(onActivated);
     browser.tabs.onUpdated.addListener(onUpdated);
     browser.tabs.onRemoved.addListener(onRemoved);
@@ -154,6 +179,11 @@ export default function App() {
 
   const goHome = useCallback(() => {
     if (tabId == null) return;
+    const timer = syncTimersRef.current[tabId];
+    if (timer) {
+      clearTimeout(timer);
+      delete syncTimersRef.current[tabId];
+    }
     setSessions((prev) => {
       const { [tabId]: _dropped, ...rest } = prev;
       return rest;
@@ -203,7 +233,7 @@ export default function App() {
                 ...f,
                 value: answer.value,
                 filledBy,
-                synced: false,
+                synced: true,
               }
             : f;
         }),
@@ -240,6 +270,58 @@ export default function App() {
     [sessions, applyAnswersToTab, bumpQuestionsRefresh],
   );
 
+  const handleGenerateCoverLetter = useCallback(
+    async (resumeId: string | null) => {
+      const appId = applicationId;
+      if (!appId) {
+        setError("Initiate or select an application before generating a cover letter.");
+        return;
+      }
+      const tab = tabId;
+      setGeneratingCoverLetter(true);
+      setError(null);
+      try {
+        await generateCoverLetter(appId, { resumeId });
+        const started = Date.now();
+        while (true) {
+          if (Date.now() - started > COVER_LETTER_TIMEOUT_MS) {
+            throw new Error("Cover letter generation timed out. Try again.");
+          }
+          await sleep(COVER_LETTER_POLL_MS);
+          const data = await fetchApplicationComprehensive(appId);
+          if (data.coverLetterStatus === "failed") {
+            throw new Error("Cover letter generation failed.");
+          }
+          if (data.coverLetterStatus === "ready") {
+            const body = data.coverLetter?.trim() ?? "";
+            if (body && tab != null) {
+              const field = (sessionsRef.current[tab]?.fields ?? []).find(
+                (f) =>
+                  COVER_LETTER_FIELD.test(f.label) && f.value.trim() === "",
+              );
+              if (field) {
+                await applyAnswersToTab(
+                  tab,
+                  [{ fieldId: field.id, value: body }],
+                  "ai",
+                );
+              }
+            }
+            bumpQuestionsRefresh();
+            break;
+          }
+        }
+      } catch (e) {
+        setError(
+          `Cover letter failed: ${e instanceof Error ? e.message : e}`,
+        );
+      } finally {
+        setGeneratingCoverLetter(false);
+      }
+    },
+    [applicationId, tabId, applyAnswersToTab, bumpQuestionsRefresh],
+  );
+
   const fillFromMemory = useCallback(
     async (tab: number, answers: FieldAnswer[]) => {
       if (answers.length === 0) return;
@@ -255,6 +337,79 @@ export default function App() {
     },
     [applyAnswersToTab],
   );
+
+  const runSync = useCallback(
+    async (tab: number) => {
+      const s = sessionsRef.current[tab];
+      const appId = s?.application?.id;
+      if (!appId || !s) return;
+      if (s.application?.status === "applied") return;
+
+      const toSync = s.fields.filter(
+        (f) => f.filledBy === "user" && !f.synced && f.value.trim() !== "",
+      );
+      if (toSync.length === 0) return;
+
+      setSyncingTabs((prev) => {
+        const next = new Set(prev);
+        next.add(tab);
+        return next;
+      });
+      setError(null);
+      try {
+        await syncFields(appId, toSync);
+        setTabFields(tab, (prev) =>
+          prev.map((f) => {
+            const sent = toSync.find((item) => item.id === f.id);
+            if (sent && sent.value === f.value) return { ...f, synced: true };
+            return f;
+          }),
+        );
+        bumpQuestionsRefresh();
+      } catch (e) {
+        setError(`Sync failed: ${e instanceof Error ? e.message : e}`);
+        throw e;
+      } finally {
+        setSyncingTabs((prev) => {
+          const next = new Set(prev);
+          next.delete(tab);
+          return next;
+        });
+      }
+    },
+    [setTabFields, bumpQuestionsRefresh],
+  );
+
+  const scheduleSync = useCallback(
+    (tab: number) => {
+      const existing = syncTimersRef.current[tab];
+      if (existing) clearTimeout(existing);
+      syncTimersRef.current[tab] = setTimeout(() => {
+        delete syncTimersRef.current[tab];
+        void runSync(tab).catch(() => {});
+      }, SYNC_DEBOUNCE_MS);
+    },
+    [runSync],
+  );
+
+  const flushSync = useCallback(async () => {
+    if (tabId == null) return;
+    const existing = syncTimersRef.current[tabId];
+    if (existing) {
+      clearTimeout(existing);
+      delete syncTimersRef.current[tabId];
+    }
+    await runSync(tabId);
+  }, [tabId, runSync]);
+
+  useEffect(() => {
+    return () => {
+      for (const timer of Object.values(syncTimersRef.current)) {
+        clearTimeout(timer);
+      }
+      syncTimersRef.current = {};
+    };
+  }, []);
 
   // Messages from content scripts; sender.tab identifies which tab they came from.
   useEffect(() => {
@@ -281,6 +436,7 @@ export default function App() {
                 : f,
             ),
           );
+          scheduleSync(senderTab);
           break;
         case "FILL_REQUESTED": {
           setSessions((prev) => {
@@ -298,7 +454,7 @@ export default function App() {
     };
     browser.runtime.onMessage.addListener(listener);
     return () => browser.runtime.onMessage.removeListener(listener);
-  }, [setTabFields, fillFields]);
+  }, [setTabFields, fillFields, scheduleSync]);
 
   const scan = useCallback(async () => {
     setScanning(true);
@@ -338,26 +494,6 @@ export default function App() {
       setScanning(false);
     }
   }, [setTabFields]);
-
-  const sync = useCallback(async () => {
-    if (tabId == null) return;
-    if (!applicationId) {
-      setError("Initiate or select an application before syncing.");
-      return;
-    }
-    setSyncing(true);
-    setError(null);
-    try {
-      const toSync = fields.filter((f) => f.value.trim() !== "");
-      await syncFields(applicationId, toSync);
-      setTabFields(tabId, (prev) => prev.map((f) => ({ ...f, synced: true })));
-      bumpQuestionsRefresh();
-    } catch (e) {
-      setError(`Sync failed: ${e instanceof Error ? e.message : e}`);
-    } finally {
-      setSyncing(false);
-    }
-  }, [tabId, applicationId, fields, setTabFields, bumpQuestionsRefresh]);
 
   return (
     <div className="flex h-screen flex-col bg-white text-sm text-gray-900">
@@ -399,13 +535,15 @@ export default function App() {
             fields={fields}
             scanning={scanning}
             filling={filling}
+            generatingCoverLetter={generatingCoverLetter}
             syncing={syncing}
             error={error}
             tabId={tabId}
             unsyncedCount={unsyncedCount}
             onScan={scan}
-            onSync={sync}
+            onSync={flushSync}
             onFill={fillFields}
+            onGenerateCoverLetter={handleGenerateCoverLetter}
             onFillFromMemory={fillFromMemory}
             applicationId={applicationId}
             onApplicationCreated={handleApplicationCreated}

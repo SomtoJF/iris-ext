@@ -19,17 +19,19 @@ interface Props {
   fields: DetectedField[];
   scanning: boolean;
   filling: boolean;
+  generatingCoverLetter: boolean;
   syncing: boolean;
   error: string | null;
   tabId: number | null;
   unsyncedCount: number;
   onScan: () => void;
-  onSync: () => void;
+  onSync: () => Promise<void>;
   onFill: (
     tabId: number,
     fields: DetectedField[],
     contextUrls: string[],
   ) => void;
+  onGenerateCoverLetter: (resumeId: string | null) => void;
   onFillFromMemory: (tabId: number, answers: FieldAnswer[]) => void;
   onApplicationCreated: (app: JobApplicationSummary) => void;
   onMarkedApplied?: () => void;
@@ -40,6 +42,7 @@ export default function ApplicationScreen({
   fields,
   scanning,
   filling,
+  generatingCoverLetter,
   syncing,
   error,
   tabId,
@@ -48,6 +51,7 @@ export default function ApplicationScreen({
   onScan,
   onSync,
   onFill,
+  onGenerateCoverLetter,
   onFillFromMemory,
   onApplicationCreated,
   onMarkedApplied,
@@ -178,6 +182,7 @@ export default function ApplicationScreen({
               fields={fields}
               scanning={scanning}
               filling={filling}
+              generatingCoverLetter={generatingCoverLetter}
               syncing={syncing}
               error={error}
               tabId={tabId}
@@ -188,6 +193,7 @@ export default function ApplicationScreen({
               onScan={onScan}
               onSync={onSync}
               onFill={onFill}
+              onGenerateCoverLetter={onGenerateCoverLetter}
               onApplicationResumeChange={handleApplicationResumeChange}
               applied={completeApplication?.status === "applied"}
               onMarkedApplied={() => {

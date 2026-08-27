@@ -8,6 +8,7 @@ interface Props {
   fields: DetectedField[];
   scanning: boolean;
   filling: boolean;
+  generatingCoverLetter: boolean;
   syncing: boolean;
   error: string | null;
   tabId: number | null;
@@ -16,8 +17,9 @@ interface Props {
   applicationResumeId: string | null;
   resumes: Resume[];
   onScan: () => void;
-  onSync: () => void;
+  onSync: () => Promise<void>;
   onFill: (tabId: number, fields: DetectedField[], contextUrls: string[]) => void;
+  onGenerateCoverLetter: (resumeId: string | null) => void;
   onApplicationResumeChange: (resumeId: string) => void;
   applied?: boolean;
   onMarkedApplied?: () => void;
@@ -27,6 +29,7 @@ export default function FieldsTab({
   fields,
   scanning,
   filling,
+  generatingCoverLetter,
   syncing,
   error,
   tabId,
@@ -37,6 +40,7 @@ export default function FieldsTab({
   onScan,
   onSync,
   onFill,
+  onGenerateCoverLetter,
   onApplicationResumeChange,
   applied,
   onMarkedApplied,
@@ -76,6 +80,7 @@ export default function FieldsTab({
         fields={fields}
         scanning={scanning}
         filling={filling}
+        generatingCoverLetter={generatingCoverLetter}
         syncing={syncing}
         tabId={tabId}
         unsyncedCount={unsyncedCount}
@@ -85,6 +90,7 @@ export default function FieldsTab({
         onScan={onScan}
         onSync={onSync}
         onFill={onFill}
+        onGenerateCoverLetter={onGenerateCoverLetter}
         onApplicationResumeChange={onApplicationResumeChange}
         applied={applied}
         onMarkedApplied={onMarkedApplied}

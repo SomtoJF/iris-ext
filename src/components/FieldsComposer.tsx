@@ -6,9 +6,9 @@ import {
   FileText,
   Globe,
   LaptopMinimalCheck,
+  Loader2,
   MoreHorizontal,
   Plus,
-  RefreshCcw,
   Sparkles,
   X,
 } from "lucide-react";
@@ -47,6 +47,7 @@ interface Props {
   fields: DetectedField[];
   scanning: boolean;
   filling: boolean;
+  generatingCoverLetter: boolean;
   syncing: boolean;
   tabId: number | null;
   unsyncedCount: number;
@@ -54,12 +55,13 @@ interface Props {
   applicationResumeId: string | null;
   resumes: Resume[];
   onScan: () => void;
-  onSync: () => void;
+  onSync: () => Promise<void>;
   onFill: (
     tabId: number,
     fields: DetectedField[],
     contextUrls: string[],
   ) => void;
+  onGenerateCoverLetter: (resumeId: string | null) => void;
   onApplicationResumeChange: (resumeId: string) => void;
   applied?: boolean;
   onMarkedApplied?: () => void;
@@ -76,6 +78,7 @@ export function FieldsComposer({
   fields,
   scanning,
   filling,
+  generatingCoverLetter,
   syncing,
   tabId,
   unsyncedCount,
@@ -85,6 +88,7 @@ export function FieldsComposer({
   onScan,
   onSync,
   onFill,
+  onGenerateCoverLetter,
   onApplicationResumeChange,
   applied = false,
   onMarkedApplied,
@@ -100,6 +104,9 @@ export function FieldsComposer({
   const [tabsQuery, setTabsQuery] = useState("");
   const [openTabs, setOpenTabs] = useState<OpenTabOption[]>([]);
   const [tabsLoading, setTabsLoading] = useState(false);
+  const [operation, setOperation] = useState<"fill" | "generate-cover-letter">(
+    "fill",
+  );
 
   const effectiveResumeId =
     applicationResumeId ?? resumes.find((r) => r.isActive)?.id ?? null;
@@ -196,6 +203,12 @@ export function FieldsComposer({
     setPlusOpen(false);
   }
 
+  const handleSelectOperation = (
+    operation: "fill" | "generate-cover-letter",
+  ) => {
+    setOperation(operation);
+  };
+
   function removeContextPage(url: string) {
     setContextPages((prev) => prev.filter((p) => p.url !== url));
   }
@@ -209,16 +222,22 @@ export function FieldsComposer({
     );
   }
 
+  function handleGenerate() {
+    if (applicationId == null) return;
+    onGenerateCoverLetter(effectiveResumeId);
+  }
+
   async function handleMarkAsApplied() {
     if (applicationId == null || applied || markingApplied) return;
     const confirmed = window.confirm(
-      "Mark this application as applied? Please sync your application data first. After marking as applied, you won't be able to edit it.",
+      "Mark this application as applied? After marking as applied, you won't be able to edit it.",
     );
     if (!confirmed) return;
 
     setMarkAppliedError(null);
     setMarkingApplied(true);
     try {
+      await onSync();
       await markApplicationApplied(applicationId);
       onMarkedApplied?.();
     } catch (e) {
@@ -261,12 +280,6 @@ export function FieldsComposer({
                     ? "Rescan page"
                     : "Scan this page"}
               </DropdownMenuItem>
-              {unsyncedCount > 0 && (
-                <DropdownMenuItem disabled={syncing} onClick={() => onSync()}>
-                  <RefreshCcw className="size-4" />
-                  {syncing ? "Syncing…" : `Sync (${unsyncedCount})`}
-                </DropdownMenuItem>
-              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -274,7 +287,11 @@ export function FieldsComposer({
             type="button"
             size="sm"
             disabled={
-              markingApplied || filling || applied || applicationId == null
+              markingApplied ||
+              filling ||
+              generatingCoverLetter ||
+              applied ||
+              applicationId == null
             }
             onClick={handleMarkAsApplied}
             className="gap-1.5 bg-green-600 text-white hover:bg-green-700"
@@ -286,6 +303,13 @@ export function FieldsComposer({
                 ? "Marking…"
                 : "Mark as applied"}
           </Button>
+
+          {syncing && (
+            <span className="inline-flex items-center gap-1 self-center text-xs text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" />
+              Syncing
+            </span>
+          )}
         </div>
         {markAppliedError && (
           <p className="mb-1.5 text-xs text-red-600">{markAppliedError}</p>
@@ -457,26 +481,92 @@ export function FieldsComposer({
               </Popover>
             </div>
 
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                size="sm"
-                disabled={
-                  filling ||
-                  applied ||
-                  emptyFields.length === 0 ||
-                  tabId == null
-                }
-                onClick={handleFill}
-                className="gap-1.5 bg-violet-600 text-white hover:bg-violet-700"
-              >
-                <Sparkles className="size-3.5" />
-                {filling
-                  ? "Filling…"
-                  : emptyFields.length === 0
-                    ? "All fields filled"
-                    : `Fill (${emptyFields.length})`}
-              </Button>
+            <div className="flex justify-end gap-0">
+              {operation === "fill" && (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    filling ||
+                    applied ||
+                    emptyFields.length === 0 ||
+                    tabId == null
+                  }
+                  onClick={handleFill}
+                  className="gap-1.5 bg-violet-600 text-white hover:bg-violet-700 rounded-lg rounded-r-none border-r-violet-500"
+                >
+                  <Sparkles className="size-3.5" />
+                  {filling
+                    ? "Filling…"
+                    : emptyFields.length === 0
+                      ? "All fields filled"
+                      : `Fill (${emptyFields.length})`}
+                </Button>
+              )}
+
+              {operation === "generate-cover-letter" && (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    generatingCoverLetter || applied || applicationId == null
+                  }
+                  onClick={handleGenerate}
+                  className="gap-1.5 bg-violet-600 text-white hover:bg-violet-700 rounded-lg rounded-r-none border-r-violet-500"
+                >
+                  {generatingCoverLetter ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-3.5" />
+                  )}
+                  {generatingCoverLetter
+                    ? "Generating…"
+                    : "Generate cover letter"}
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={applied}
+                      className="border-l-0 bg-violet-600 text-white hover:bg-violet-700 rounded-lg rounded-l-none w-fit px-1"
+                    />
+                  }
+                >
+                  <ChevronDown className="size-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  side="top"
+                  className="min-w-44 text-xs"
+                >
+                  <DropdownMenuItem
+                    onClick={() => handleSelectOperation("fill")}
+                  >
+                    {filling ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5" />
+                    )}
+                    Fill
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      handleSelectOperation("generate-cover-letter")
+                    }
+                    className="whitespace-nowrap"
+                  >
+                    {generatingCoverLetter ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <FileText className="w-3.5 h-3.5" />
+                    )}
+                    Generate cover letter
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </CardContent>
         </Card>
