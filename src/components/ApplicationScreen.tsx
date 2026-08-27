@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback } from "react";
 import FieldsTab from "./FieldsTab";
 import AnswersTab from "./AnswersTab";
 import { JobDescription } from "./JobDescription";
+import { DocumentPanel } from "./DocumentPanel";
 import { fetchResumes, type Resume } from "@/services/resume";
 
 interface Props {
@@ -134,7 +135,20 @@ export default function ApplicationScreen({
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {completeApplication && (
-        <JobDescription markdown={completeApplication.jobDescription} />
+        <div className="max-h-64 shrink-0 overflow-y-auto border-b border-gray-200 p-4">
+          <JobDescription markdown={completeApplication.jobDescription} />
+          {completeApplication.coverLetter?.trim() ? (
+            <DocumentPanel
+              title="Cover Letter"
+              copyText={completeApplication.coverLetter}
+              className="mt-4 border-t border-gray-200 pt-4"
+            >
+              <p className="whitespace-pre-wrap">
+                {completeApplication.coverLetter}
+              </p>
+            </DocumentPanel>
+          ) : null}
+        </div>
       )}
       {isNewApplication && (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
